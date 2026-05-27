@@ -24,7 +24,9 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
     return result;
   };
 
-  const photoPages = chunkDamagesForPhotos(damages, 6);
+  // Filter only damages that have photos occupied for the photos sheet pages
+  const damagesWithPhotos = damages.filter(d => d.photoUrls && d.photoUrls.length > 0);
+  const photoPages = chunkDamagesForPhotos(damagesWithPhotos, 6);
 
   const handlePrintTrigger = () => {
     window.print();
@@ -120,11 +122,11 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
           <table className="w-full border-collapse border border-slate-800 text-xs text-center">
             <thead>
               <tr className="bg-slate-100">
-                <th className="border border-slate-800 p-2 font-bold w-[10%]">No.</th>
-                <th className="border border-slate-800 p-2 font-bold w-[25%]">시설물명</th>
-                <th className="border border-slate-800 p-2 font-bold w-[20%]">위치(층/부재)</th>
+                <th className="border border-slate-800 p-2 font-bold w-[8%]">No.</th>
+                <th className="border border-slate-800 p-2 font-bold w-[20%]">시설물명</th>
+                <th className="border border-slate-800 p-2 font-bold w-[12%]">위치(층/부재)</th>
                 <th className="border border-slate-800 p-2 font-bold w-[25%]">결함종류 및 규격</th>
-                <th className="border border-slate-800 p-2 font-bold w-[20%]">추정 원인</th>
+                <th className="border border-slate-800 p-2 font-bold w-[35%]">추정 원인</th>
               </tr>
             </thead>
             <tbody>
@@ -153,35 +155,23 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
         {photoPages.map((pageChunk, idx) => (
           <div className="bg-white text-slate-900 shadow-2xl w-[210mm] min-h-[297mm] p-[15mm] flex flex-col border border-slate-200" key={`screen-photo-page-${idx}`}>
             <h2 className="text-xl font-extrabold text-center border-b border-slate-800 pb-3 mb-6">
-              현장 안전점검 사진대지 (No.{pageChunk[0].no} ~ No.{pageChunk[pageChunk.length - 1].no})
+              결함현황 사진대지 (No.{pageChunk[0].no} ~ No.{pageChunk[pageChunk.length - 1].no})
             </h2>
 
             <div className="grid grid-cols-2 gap-4 flex-1">
               {pageChunk.map((d) => {
                 const causeText = d.cause === '기타 직접입력' ? d.customCause : d.cause;
                 return (
-                  <div className="border border-slate-300 flex flex-col overflow-hidden bg-white h-[240px]" key={`screen-cell-${d.id}`}>
+                  <div className="border border-slate-300 flex flex-col overflow-hidden bg-white h-[260px]" key={`screen-cell-${d.id}`}>
                     <div className="flex-1 bg-slate-50 flex items-center justify-center overflow-hidden relative">
                       {d.photoUrls && d.photoUrls.length > 0 ? (
-                        <div className="w-full h-full relative flex items-center justify-center">
+                        <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
                           <img
                             src={d.photoUrls[0]}
                             alt="structural fault"
                             className="object-contain w-full h-full max-h-[140px]"
                             referrerPolicy="no-referrer"
                           />
-                          {d.boundingBoxes && d.boundingBoxes.map((box, bIdx) => (
-                            <div
-                              key={bIdx}
-                              className="absolute border-2 border-red-500 pointer-events-none"
-                              style={{
-                                left: `${box.x}%`,
-                                top: `${box.y}%`,
-                                width: `${box.width}%`,
-                                height: `${box.height}%`,
-                              }}
-                            />
-                          ))}
                         </div>
                       ) : (
                         <div className="text-slate-400 text-[10px]">촬영된 사진이 없습니다</div>
@@ -193,6 +183,10 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
 
                     <table className="w-full border-t border-slate-300 text-[10px] text-left border-collapse table-fixed">
                       <tbody>
+                        <tr className="border-b border-slate-200">
+                          <td className="w-[30%] bg-slate-50 font-bold p-1 text-center border-r border-slate-200">시설물 명</td>
+                          <td className="p-1 pl-1.5 truncate font-semibold text-slate-800">{project.name}</td>
+                        </tr>
                         <tr className="border-b border-slate-200">
                           <td className="w-[30%] bg-slate-50 font-bold p-1 text-center border-r border-slate-200">위 치</td>
                           <td className="p-1 pl-1.5 truncate">{d.floor} / {d.member}</td>
@@ -219,8 +213,8 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
                 );
               })}
               {Array.from({ length: 6 - pageChunk.length }).map((_, i) => (
-                <div className="border border-dashed border-slate-200 bg-slate-50/50 flex items-center justify-center h-[240px]" key={`screen-blank-${i}`}>
-                  <span className="text-[10px] text-slate-300">빈 대지 영역 (미등록)</span>
+                <div className="border border-dashed border-slate-200 bg-slate-50/50 flex items-center justify-center h-[260px]" key={`screen-blank-${i}`}>
+                   <span className="text-[10px] text-slate-300">빈 대지 영역 (미등록)</span>
                 </div>
               ))}
             </div>
@@ -422,10 +416,10 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
             <thead>
               <tr className="bg-slate-100">
                 <th className="border border-slate-900 p-1.5 font-bold w-[7%]">No.</th>
-                <th className="border border-slate-900 p-1.5 font-bold w-[25%]">시설물명</th>
-                <th className="border border-slate-900 p-1.5 font-bold w-[18%]">위치(층/부재)</th>
-                <th className="border border-slate-900 p-1.5 font-bold w-[30%]">결함 종류 및 정밀 규격</th>
-                <th className="border border-slate-900 p-1.5 font-bold w-[20%]">발생 추정공학적 원인</th>
+                <th className="border border-slate-900 p-1.5 font-bold w-[20%]">시설물명</th>
+                <th className="border border-slate-900 p-1.5 font-bold w-[12%]">위치(층/부재)</th>
+                <th className="border border-slate-900 p-1.5 font-bold w-[26%]">결함 종류 및 정밀 규격</th>
+                <th className="border border-slate-900 p-1.5 font-bold w-[35%]">발생 추정공학적 원인</th>
               </tr>
             </thead>
             <tbody>
@@ -467,7 +461,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
           <div className="print-page" key={`print-photo-page-${idx}`}>
             <div className="text-center mb-4">
               <h2 className="text-lg font-bold tracking-tight border-b border-slate-950 pb-1.5 inline-block">
-                현장 안전점검 사진대지 (No.{pageChunk[0].no} ~ No.{pageChunk[pageChunk.length - 1].no})
+                결함현황 사진대지 (No.{pageChunk[0].no} ~ No.{pageChunk[pageChunk.length - 1].no})
               </h2>
             </div>
 
@@ -480,26 +474,13 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
                     {/* Visual photo Box */}
                     <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden relative">
                       {d.photoUrls && d.photoUrls.length > 0 ? (
-                        <div className="w-full h-full relative flex items-center justify-center">
+                        <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
                           <img
                             src={d.photoUrls[0]}
                             alt="structural fault"
                             className="object-contain w-full h-full max-h-[140px]"
                             referrerPolicy="no-referrer"
                           />
-                          {/* Sketch coordinates and AI scan bounding overlay highlight */}
-                          {d.boundingBoxes && d.boundingBoxes.map((box, bIdx) => (
-                            <div
-                              key={bIdx}
-                              className="absolute border-2 border-red-500 pointer-events-none"
-                              style={{
-                                left: `${box.x}%`,
-                                top: `${box.y}%`,
-                                width: `${box.width}%`,
-                                height: `${box.height}%`,
-                              }}
-                            />
-                          ))}
                         </div>
                       ) : (
                         <div className="text-slate-400 text-[10px] font-sans">촬영된 사진이 없습니다</div>
@@ -514,6 +495,10 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
                     {/* Meta specification table description under the picture */}
                     <table className="w-full border-t border-slate-950 text-[10px] text-left border-collapse table-fixed">
                       <tbody>
+                        <tr className="border-b border-slate-300">
+                          <td className="w-[30%] bg-slate-100 font-bold p-1 text-center border-r border-slate-300">시설물 명</td>
+                          <td className="p-1 pl-1.5 break-all truncate font-semibold">{project.name}</td>
+                        </tr>
                         <tr className="border-b border-slate-300">
                           <td className="w-[30%] bg-slate-100 font-bold p-1 text-center border-r border-slate-300">위 치</td>
                           <td className="p-1 pl-1.5 break-all truncate">{d.floor} / {d.member}</td>
