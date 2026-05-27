@@ -979,7 +979,7 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
               </p>
               <ul className="list-disc list-inside space-y-1.5">
                 <li><strong>PDF 도면 완벽 호환</strong>: PDF 포맷 설계 도면 업로드 시 첫째 장을 디스크 왜곡이나 스케일 깨짐 방지를 위해 원본 비율 그대로 백터 변환합니다.</li>
-                <li><strong>자동 픽셀 스케일 보정</strong>: 마킹한 좌표(% 단위)는 도면 파일 크기나 화면 대역폭의 영향을 받지 않고 절대값으로 견고하게 동기화 유지됩니다.</li>
+                <li><strong>자동 픽셀 스케일 보정</strong>: 마킹한 좌표(% 단위)는 도면 파일 크기나 화면 대역폭의 영향을 받지 않고 절대값으로 견고하게 유지됩니다.</li>
                 <li><strong>데이터 절약</strong>: 도면은 캔버스 압축 최적화(Quality 0.8)를 통해 데이터 사용량을 절감합니다.</li>
               </ul>
             </div>
