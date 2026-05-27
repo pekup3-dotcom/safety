@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Robust Primitive validation helpers
+    function isValidId(id) { 
+      return id is string && id.size() <= 128; 
+    }
+    
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function incoming() { 
+      return request.resource.data; 
+    }
+    
+    function existing() { 
+      return resource.data; 
+    }
+
+    // Scheme checker helper functions
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'name', 'inspectionCompany', 'floorOptions', 'damages', 'createdAt', 'updatedAt'])
+        && data.id is string 
+        && data.id.size() <= 128
+        && data.name is string 
+        && data.name.size() <= 300
+        && data.inspectionCompany is string 
+        && data.inspectionCompany.size() <= 300
+        && data.floorOptions is list
+        && data.damages is list
+        && data.createdAt is string
+        && data.updatedAt is string;
+    }
+
+    match /projects/{projectId} {
+      // Path variables verification and secure read/write actions
+      allow read: if isSignedIn() && isValidId(projectId);
+      allow create: if isSignedIn() && isValidId(projectId) && isValidProject(incoming());
+      allow update: if isSignedIn() && isValidId(projectId) && isValidProject(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn() && isValidId(projectId);
+    }
+  }
+}

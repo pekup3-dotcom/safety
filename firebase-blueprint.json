@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "Safety inspection project site details including registered damages",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique UUID identification of the project"
+        },
+        "name": {
+          "type": "string",
+          "description": "General name of the main target building structure"
+        },
+        "inspectionCompany": {
+          "type": "string",
+          "description": "Name of the professional inspection inspectionCompany doing the safety audit"
+        },
+        "facilitiesRaw": {
+          "type": "string",
+          "description": "Raw comma-separated facilities user input"
+        },
+        "facilitiesList": {
+          "type": "array",
+          "description": "Parsed list of facilities names"
+        },
+        "basementFloors": {
+          "type": "integer",
+          "description": "Total count of underground/basement floor levels"
+        },
+        "abovegroundFloors": {
+          "type": "integer",
+          "description": "Total count of above-ground floor levels"
+        },
+        "floorOptions": {
+          "type": "array",
+          "description": "Exhaustive calculated selection string options of target levels"
+        },
+        "drawingUrl": {
+          "type": "string",
+          "description": "Optional Base64 scaled CAD or floorplan image layout"
+        },
+        "drawingName": {
+          "type": "string",
+          "description": "Filename of originally uploaded drawing layout"
+        },
+        "damages": {
+          "type": "array",
+          "description": "Embedded structured record log of registered structural defects"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp representing the creation moment"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp representing the most recent sync tick"
+        }
+      },
+      "required": ["id", "name", "inspectionCompany", "floorOptions", "damages", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "projects/{projectId}": {
+      "schema": "Project",
+      "description": "Collaborative real-time database collection storing safety inspection projects"
+    }
+  }
+}

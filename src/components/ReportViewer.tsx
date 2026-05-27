@@ -148,6 +148,89 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
             </tbody>
           </table>
         </div>
+
+        {/* Photo Pages Previews on Screen */}
+        {photoPages.map((pageChunk, idx) => (
+          <div className="bg-white text-slate-900 shadow-2xl w-[210mm] min-h-[297mm] p-[15mm] flex flex-col border border-slate-200" key={`screen-photo-page-${idx}`}>
+            <h2 className="text-xl font-extrabold text-center border-b border-slate-800 pb-3 mb-6">
+              현장 안전점검 사진대지 (No.{pageChunk[0].no} ~ No.{pageChunk[pageChunk.length - 1].no})
+            </h2>
+
+            <div className="grid grid-cols-2 gap-4 flex-1">
+              {pageChunk.map((d) => {
+                const causeText = d.cause === '기타 직접입력' ? d.customCause : d.cause;
+                return (
+                  <div className="border border-slate-300 flex flex-col overflow-hidden bg-white h-[240px]" key={`screen-cell-${d.id}`}>
+                    <div className="flex-1 bg-slate-50 flex items-center justify-center overflow-hidden relative">
+                      {d.photoUrls && d.photoUrls.length > 0 ? (
+                        <div className="w-full h-full relative flex items-center justify-center">
+                          <img
+                            src={d.photoUrls[0]}
+                            alt="structural fault"
+                            className="object-contain w-full h-full max-h-[140px]"
+                            referrerPolicy="no-referrer"
+                          />
+                          {d.boundingBoxes && d.boundingBoxes.map((box, bIdx) => (
+                            <div
+                              key={bIdx}
+                              className="absolute border-2 border-red-500 pointer-events-none"
+                              style={{
+                                left: `${box.x}%`,
+                                top: `${box.y}%`,
+                                width: `${box.width}%`,
+                                height: `${box.height}%`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-slate-400 text-[10px]">촬영된 사진이 없습니다</div>
+                      )}
+                      <span className="absolute top-1 right-1 bg-slate-900 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow">
+                        No.{d.no}
+                      </span>
+                    </div>
+
+                    <table className="w-full border-t border-slate-300 text-[10px] text-left border-collapse table-fixed">
+                      <tbody>
+                        <tr className="border-b border-slate-200">
+                          <td className="w-[30%] bg-slate-50 font-bold p-1 text-center border-r border-slate-200">위 치</td>
+                          <td className="p-1 pl-1.5 truncate">{d.floor} / {d.member}</td>
+                        </tr>
+                        <tr className="border-b border-slate-200">
+                          <td className="bg-slate-50 font-bold p-1 text-center border-r border-slate-200">결함명(크기)</td>
+                          <td className="p-1 pl-1.5 font-mono text-[9.5px]">
+                            {d.type} (
+                            {d.type.includes('균열')
+                              ? `${d.widthVal.toFixed(1)}mm x ${d.lengthVal.toFixed(1)}m`
+                              : `${d.widthVal.toFixed(1)}x${d.lengthVal.toFixed(1)}m`
+                            })
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="bg-slate-50 font-bold p-1 text-center border-r border-slate-200">발생원인</td>
+                          <td className="p-1 pl-1.5 text-[9px] truncate font-sans text-slate-800">
+                            {causeText}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+              {Array.from({ length: 6 - pageChunk.length }).map((_, i) => (
+                <div className="border border-dashed border-slate-200 bg-slate-50/50 flex items-center justify-center h-[240px]" key={`screen-blank-${i}`}>
+                  <span className="text-[10px] text-slate-300">빈 대지 영역 (미등록)</span>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-4 pt-2 border-t border-slate-200 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+              <span>{project.inspectionCompany} | 안전점검 사진첩 미리보기</span>
+              <span>Page {idx + 3} / {photoPages.length + 2}</span>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* ACTUAL SEAMLESS PRINT STYLING TARGET (HIDDEN IN WORKSPACE, DISPLAYED ONLY FOR CTRL+P PRINT ENGINE) */}

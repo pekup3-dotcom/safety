@@ -16,9 +16,10 @@ interface DrawingCanvasProps {
 }
 
 interface GroupedPoints {
-  id: string; // Coordinate string e.g., "50.5-42.3"
+  id: string; // Coordinate string with floor e.g., "50.5-42.3-지상1층"
   x: number;  // original percentage
   y: number;  // original percentage
+  layoutY: number; // calculated layout position with collision avoidance
   damages: Damage[];
   primaryMember: MemberType;
 }
@@ -33,6 +34,70 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [zoom, setZoom] = useState<number>(1.0);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 600, height: 450 });
+  
+  // New visual parameters with requested default settings:
+  // 1. 텍스트상자 투명도 80% (opacity 0.8)
+  // 2. 텍스트상자 50%의 크기로 축소 (sizeScale 0.5)
+  // 3. 겹치지 않도록 자동 위치 조정 기능 활성화 (autoAvoidOverlap)
+  const [opacity, setOpacity] = useState<number>(0.8);
+  const [sizeScale, setSizeScale] = useState<number>(0.5);
+  const [autoAvoidOverlap, setAutoAvoidOverlap] = useState<boolean>(true);
+
+  // States to manage custom dragged positions of text boxes (labels)
+  const [customPositions, setCustomPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragOffsetStart, setDragOffsetStart] = useState<{ x: number; y: number } | null>(null);
+
+  // Mouse drag handler on individual label cards
+  const handleMouseDown = (e: React.MouseEvent, id: string, ix: number, iy: number) => {
+    // If the user is clicking on scrollable items/buttons, don't trigger drag
+    if ((e.target as HTMLElement).closest('.stop-drag')) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggedId(id);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setDragOffsetStart({ x: ix, y: iy });
+  };
+
+  // Window-level mouse listener to make dragging butter-smooth
+  useEffect(() => {
+    if (!draggedId || !dragStart || !dragOffsetStart) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+
+      // Convert pixel deltas to percentage coordinates on container size
+      // Compensate for the physical zoom factor
+      const pctDx = (dx / containerSize.width) * 100 / zoom;
+      const pctDy = (dy / containerSize.height) * 100 / zoom;
+
+      const newX = Math.max(0, Math.min(100, dragOffsetStart.x + pctDx));
+      const newY = Math.max(0, Math.min(100, dragOffsetStart.y + pctDy));
+
+      setCustomPositions((prev) => ({
+        ...prev,
+        [draggedId]: { x: newX, y: newY },
+      }));
+    };
+
+    const handleMouseUp = () => {
+      setDraggedId(null);
+      setDragStart(null);
+      setDragOffsetStart(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggedId, dragStart, dragOffsetStart, containerSize, zoom]);
 
   // Update container size dynamically to keep coordinates sync
   useEffect(() => {
@@ -67,7 +132,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     onAddMarker(percentX, percentY);
   };
 
-  // 1. Group damages by location (Snap within 1.5% radius)
+  // 1. Group damages by location (Snap within 1.5% radius AND match same floor)
   const groupDamages = (): GroupedPoints[] => {
     const groups: GroupedPoints[] = [];
     const threshold = 1.6; // 1.5% - 1.6% radius
@@ -78,16 +143,16 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     markedDamages.forEach((damage) => {
       if (!damage.marker) return;
       
-      // Look for any existing close group
+      // Look for any existing close group on the SAME floor
       let joined = false;
       for (const g of groups) {
         const dx = g.x - damage.marker.x;
         const dy = g.y - damage.marker.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         
-        if (dist <= threshold) {
+        // Match both coordinate proximity AND floor identity
+        if (dist <= threshold && g.damages[0].floor === damage.floor) {
           g.damages.push(damage);
-          // Auto group coordinates should align
           joined = true;
           break;
         }
@@ -95,9 +160,10 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
       if (!joined) {
         groups.push({
-          id: `${damage.marker.x.toFixed(2)}-${damage.marker.y.toFixed(2)}`,
+          id: `${damage.marker.x.toFixed(2)}-${damage.marker.y.toFixed(2)}-${damage.floor}`,
           x: damage.marker.x,
           y: damage.marker.y,
+          layoutY: damage.marker.y,
           damages: [damage],
           primaryMember: damage.member,
         });
@@ -109,7 +175,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   const defectGroups = groupDamages();
 
-  // 2. Perform Y-collision avoidance algorithm to layout labels on left/right side columns neatly
+  // 2. Perform Y-collision avoidance algorithm with dynamic minGap calculation
   const layoutLabels = (groups: GroupedPoints[]) => {
     const leftColumn: typeof groups = [];
     const rightColumn: typeof groups = [];
@@ -127,15 +193,17 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     leftColumn.sort((a, b) => a.y - b.y);
     rightColumn.sort((a, b) => a.y - b.y);
 
-    const minGap = 7; // Minimal separation between adjacent box centers in percent (0-100)
+    // Separation between adjacent box centers in percentage scale.
+    // Proportional to text-box size! (Smaller text-boxes require less spacing gap)
+    const minGap = autoAvoidOverlap ? Math.max(3.5, 11 * sizeScale) : 0;
 
     // Push down pass (Forward)
     const resolveOverlapForward = (col: typeof groups) => {
       for (let i = 1; i < col.length; i++) {
         const prev = col[i - 1];
         const curr = col[i];
-        if (curr.y < prev.y + minGap) {
-          curr.y = prev.y + minGap;
+        if (curr.layoutY < prev.layoutY + minGap) {
+          curr.layoutY = prev.layoutY + minGap;
         }
       }
     };
@@ -145,17 +213,33 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
       for (let i = col.length - 2; i >= 0; i--) {
         const next = col[i + 1];
         const curr = col[i];
-        if (curr.y > next.y - minGap) {
-          curr.y = next.y - minGap;
+        if (curr.layoutY > next.layoutY - minGap) {
+          curr.layoutY = next.layoutY - minGap;
         }
       }
     };
 
-    resolveOverlapForward(leftColumn);
-    resolveOverlapBackward(leftColumn);
+    if (autoAvoidOverlap) {
+      resolveOverlapForward(leftColumn);
+      resolveOverlapBackward(leftColumn);
+      resolveOverlapForward(rightColumn);
+      resolveOverlapBackward(rightColumn);
+    } else {
+      // If auto avoidance is OFF, fall back to exact vertical markers values
+      leftColumn.forEach((g) => { g.layoutY = g.y; });
+      rightColumn.forEach((g) => { g.layoutY = g.y; });
+    }
 
-    resolveOverlapForward(rightColumn);
-    resolveOverlapBackward(rightColumn);
+    // Keep layout coordinates within boundary
+    leftColumn.forEach((g) => {
+      if (g.layoutY < 5) g.layoutY = 5;
+      if (g.layoutY > 95) g.layoutY = 95;
+    });
+
+    rightColumn.forEach((g) => {
+      if (g.layoutY < 5) g.layoutY = 5;
+      if (g.layoutY > 95) g.layoutY = 95;
+    });
 
     return {
       leftLayout: leftColumn,
@@ -165,10 +249,70 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
 
   const { leftLayout, rightLayout } = layoutLabels(defectGroups);
 
-  // Helper to map layout elements
+  // Helper inside loop - width percentage
+  const baseWidthPct = 16.5;
+  const widthPct = baseWidthPct * (sizeScale < 0.85 ? 0.9 : 1.0); // optimized container matching width
+
+  // 1. Process all labels and calculate their actual top-left coordinates & attach points
+  const rawAppliedLabels = [
+    ...leftLayout.map((g) => {
+      const dynamicWidthPct = widthPct * sizeScale;
+      const defaultX = 1.0;
+      const defaultY = g.layoutY - (5.0 * sizeScale);
+      
+      const boxX = customPositions[g.id] !== undefined ? customPositions[g.id].x : defaultX;
+      const boxY = customPositions[g.id] !== undefined ? customPositions[g.id].y : defaultY;
+      
+      const side = boxX + dynamicWidthPct / 2 < g.x ? 'left' as const : 'right' as const;
+      const attachX = side === 'left' ? boxX + dynamicWidthPct : boxX;
+      const attachY = boxY + (5.0 * sizeScale);
+
+      return {
+        ...g,
+        boxX,
+        boxY,
+        side,
+        attachX,
+        attachY,
+        dynamicWidthPct,
+      };
+    }),
+    ...rightLayout.map((g) => {
+      const dynamicWidthPct = widthPct * sizeScale;
+      const defaultX = 100 - dynamicWidthPct - 1.0;
+      const defaultY = g.layoutY - (5.0 * sizeScale);
+      
+      const boxX = customPositions[g.id] !== undefined ? customPositions[g.id].x : defaultX;
+      const boxY = customPositions[g.id] !== undefined ? customPositions[g.id].y : defaultY;
+      
+      const side = boxX + dynamicWidthPct / 2 < g.x ? 'left' as const : 'right' as const;
+      const attachX = side === 'left' ? boxX + dynamicWidthPct : boxX;
+      const attachY = boxY + (5.0 * sizeScale);
+
+      return {
+        ...g,
+        boxX,
+        boxY,
+        side,
+        attachX,
+        attachY,
+        dynamicWidthPct,
+      };
+    })
+  ];
+
+  // 2. Perform lane-striping layout to completely prevent indicator line overlaps
+  const leftSideConns = rawAppliedLabels.filter((c) => c.side === 'left');
+  const rightSideConns = rawAppliedLabels.filter((c) => c.side === 'right');
+
+  // Sort by mX / x point coordinates to preserve clean tracks closest to card/marker
+  leftSideConns.sort((a, b) => a.x - b.x);
+  rightSideConns.sort((a, b) => b.x - a.x);
+
+  // Map to get unique lane indices
   const allLayoutLabels = [
-    ...leftLayout.map((g) => ({ ...g, side: 'left' as const, targetX: 6 })),
-    ...rightLayout.map((g) => ({ ...g, side: 'right' as const, targetX: 94 })),
+    ...leftSideConns.map((c, i) => ({ ...c, laneIndex: i })),
+    ...rightSideConns.map((c, i) => ({ ...c, laneIndex: i })),
   ];
 
   return (
@@ -182,7 +326,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
         <div className="flex gap-2">
           <button
             onClick={handleZoomIn}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-100 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 rounded-lg transition-colors border border-slate-600"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-100 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 rounded-lg transition-colors border border-slate-600 cursor-pointer"
             title="확대 Zoom In"
           >
             <ZoomIn className="h-3.5 w-3.5" />
@@ -190,7 +334,7 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           </button>
           <button
             onClick={handleZoomOut}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-100 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 rounded-lg transition-colors border border-slate-600"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-100 bg-slate-700 hover:bg-slate-600 active:bg-slate-500 rounded-lg transition-colors border border-slate-600 cursor-pointer"
             title="축소 Zoom Out"
           >
             <ZoomOut className="h-3.5 w-3.5" />
@@ -198,13 +342,68 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
           </button>
           <button
             onClick={handleZoomReset}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700 cursor-pointer"
             title="초기화 Reset"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             {Math.round(zoom * 100)}%
           </button>
         </div>
+      </div>
+
+      {/* Rich interactive configurations subheader bar */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 bg-[#0e131f] border-b border-slate-800 text-xs font-medium text-slate-300">
+        <div className="flex items-center gap-2 border-r border-slate-800/80 pr-4">
+          <span className="text-slate-400 select-none">텍스트 정렬:</span>
+          <button
+            onClick={() => setAutoAvoidOverlap(!autoAvoidOverlap)}
+            className={`px-2 py-1 rounded text-[10px] font-bold select-none cursor-pointer duration-100 ${
+              autoAvoidOverlap
+                ? 'bg-indigo-600 hover:bg-indigo-500 text-white border border-indigo-400/20'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700'
+            }`}
+          >
+            {autoAvoidOverlap ? '자동 겹침 방지 ON' : '기본 중첩 위치 OFF'}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 border-r border-slate-800/80 pr-4">
+          <span className="text-slate-400 select-none">투명도 수치:</span>
+          <input
+            type="range"
+            min="0.2"
+            max="1.0"
+            step="0.05"
+            value={opacity}
+            onChange={(e) => setOpacity(parseFloat(e.target.value))}
+            className="w-16 sm:w-20 accent-indigo-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+          />
+          <span className="font-mono text-cyan-400 text-[10px] w-8 text-right">{Math.round(opacity * 100)}%</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400 select-none">라벨 상자 크기:</span>
+          <input
+            type="range"
+            min="0.30"
+            max="1.10"
+            step="0.05"
+            value={sizeScale}
+            onChange={(e) => setSizeScale(parseFloat(e.target.value))}
+            className="w-16 sm:w-20 accent-indigo-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg appearance-none"
+          />
+          <span className="font-mono text-cyan-400 text-[10px] w-8 text-right">{Math.round(sizeScale * 100)}%</span>
+        </div>
+
+        {/* Dynamic Reset Custom Positions handler */}
+        {Object.keys(customPositions).length > 0 && (
+          <button
+            onClick={() => setCustomPositions({})}
+            className="ml-auto px-25 py-1.5 rounded text-[10px] font-bold cursor-pointer bg-rose-950/40 border border-rose-500/30 hover:bg-rose-900/40 text-rose-300 transition duration-100 uppercase font-mono tracking-wider"
+          >
+            위치 초기화 Undo Drag
+          </button>
+        )}
       </div>
 
       {/* Main interactive area */}
@@ -270,35 +469,69 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             onClick={handleCanvasClick}
             xmlns="http://www.w3.org/2000/svg"
           >
-            {/* 1. Render pointer lines & 3-step elbows connecting labels to markers */}
+            {/* 1. Render pointer lines & 2 connected line segments connecting labels to markers */}
             {allLayoutLabels.map((lbl) => {
-              const markerX_pixel = (lbl.x / 100) * containerSize.width;
-              const markerY_pixel = (lbl.y / 100) * containerSize.height;
-
-              // Find where the marker is mapped (percentage to pixels)
+              // Find where the marker is mapped (percentage)
               const mX = lbl.x;
-              const mY = lbl.y;
+              const mY = lbl.y; // Original exact coordinate of dot
 
               // Target layout coordinates
-              const tX = lbl.targetX;
-              const tY = lbl.y; // adjusted vertical spot
+              const tX = lbl.attachX;
+              const tY = lbl.attachY;
+              const laneIndex = lbl.laneIndex ?? 0;
 
-              // Decide horizontal elbow hinge offset based on side
-              const elbowX = lbl.side === 'left' ? tX + 11 : tX - 11;
+              // Calculate unique non-overlapping horizontal gutter lane for this pointer
+              let elbowX = lbl.side === 'left' 
+                ? tX + (2.0 + laneIndex * 1.2) * sizeScale 
+                : tX - (2.0 + laneIndex * 1.2) * sizeScale;
+
+              // Boundary check: ensure elbow stays between attachment and marker with safety padding
+              if (lbl.side === 'left') {
+                if (elbowX > mX - 1.5) {
+                  elbowX = Math.max(tX + 0.5, (tX + mX) / 2);
+                }
+              } else {
+                if (elbowX < mX + 1.5) {
+                  elbowX = Math.min(tX - 0.5, (tX + mX) / 2);
+                }
+              }
 
               const isRed = getMemberColorClass(lbl.primaryMember) === 'red';
-              const strokeColor = isRed ? '#f87171' : '#60a5fa'; // Light-Red vs Light-Blue
+              const strokeColor = isRed ? '#ef4444' : '#3b82f6'; // Bright Red vs Bright Blue for high-fidelity lines
 
               return (
                 <g key={`line-${lbl.id}`} className="pointer-events-none">
-                  {/* Thin elegant joint pointer line */}
-                  <polyline
-                    points={`${mX}%,${mY}% ${elbowX}%,${tY}% ${tX}%,${tY}%`}
-                    fill="none"
+                  {/* First horizontal segment: marker point outwards to its unique gutter lane */}
+                  <line
+                    x1={`${mX}%`}
+                    y1={`${mY}%`}
+                    x2={`${elbowX}%`}
+                    y2={`${mY}%`}
                     stroke={strokeColor}
-                    strokeWidth={1.0 / zoom} // Scale-Invariant stroke width!
-                    strokeDasharray="1.5,1.5"
-                    className="opacity-75"
+                    strokeWidth={1.8 / zoom}
+                    strokeDasharray="2,2"
+                    className="opacity-90"
+                  />
+                  {/* Second vertical segment: vertical routing along helper lane */}
+                  <line
+                    x1={`${elbowX}%`}
+                    y1={`${mY}%`}
+                    x2={`${elbowX}%`}
+                    y2={`${tY}%`}
+                    stroke={strokeColor}
+                    strokeWidth={1.8 / zoom}
+                    strokeDasharray="2,2"
+                    className="opacity-95"
+                  />
+                  {/* Third horizontal segment: gutter lane into label card attachment point */}
+                  <line
+                    x1={`${elbowX}%`}
+                    y1={`${tY}%`}
+                    x2={`${tX}%`}
+                    y2={`${tY}%`}
+                    stroke={strokeColor}
+                    strokeWidth={2.0 / zoom}
+                    className="opacity-100"
                   />
                 </g>
               );
@@ -337,50 +570,62 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
               );
             })}
 
-            {/* 3. Render HTML labels inside foreignObject to accommodate styled text stack */}
+            {/* 3. Render HTML labels inside foreignObject with light gray background and red/blue text colors */}
             {allLayoutLabels.map((lbl) => {
               const isRed = getMemberColorClass(lbl.primaryMember) === 'red';
-              const badgeBg = isRed ? 'bg-red-500/10' : 'bg-blue-500/10';
-              const badgeBorder = isRed ? 'border-red-500/40 text-red-100' : 'border-blue-500/40 text-blue-100';
+              
+              // 텍스트상자 배경: 옅은 회색 적용
+              const badgeBg = 'bg-[#f3f4f6]'; // Real light gray background (Tailwind bg-gray-100)
+              const badgeBorder = isRed ? 'border-red-400 border-[1.5px] shadow-red-200/50' : 'border-blue-400 border-[1.5px] shadow-blue-200/50';
               const pointColorIndicator = isRed ? 'bg-red-500' : 'bg-blue-500';
 
-              // Determine width and alignment based on Left or Right column
-              const widthPct = 22; // Width of foreignObject box in percent
-              const boxHeightPct = 10;
-              const xPosPct = lbl.side === 'left' ? 1.5 : 100 - widthPct - 1.5;
-              const yPosPct = lbl.y - 4.5; // Offset half label height to center vertically
+              // 텍스트 색상: 벽체/기둥은 적색 (text-red-700), 보/슬래브는 청색 (text-blue-700)
+              const textColorClass = isRed ? 'text-red-700' : 'text-blue-700';
+              const subTextColorClass = isRed ? 'text-red-800/80 font-medium' : 'text-blue-800/80 font-medium';
+              const damageRowBgClass = isRed ? 'hover:bg-red-500/10' : 'hover:bg-blue-500/10';
+              const damageRowSelectedBgClass = isRed 
+                ? 'bg-red-500/15 border border-red-400/30' 
+                : 'bg-blue-500/15 border border-blue-400/30';
+
+              // Determine width and alignment based on custom coordinates or default calculation
+              const xPosPct = lbl.boxX;
+              const yPosPct = lbl.boxY;
+              const dynamicWidthPct = lbl.dynamicWidthPct;
 
               return (
                 <foreignObject
                   key={`label-box-${lbl.id}`}
                   x={`${xPosPct}%`}
                   y={`${yPosPct}%`}
-                  width={`${widthPct}%`}
-                  height="120" // fixed height container allowing text scroll/wrap without cutoff
+                  width={`${dynamicWidthPct}%`}
+                  height={`${120 * sizeScale}`} // scaled dynamic foreignObject height
                   className="overflow-visible pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()} // Prevent canvas click trigger
                 >
                   <div
-                    className={`flex flex-col gap-1 p-2 border rounded-md shadow-lg ${badgeBg} ${badgeBorder} backdrop-blur-sm select-none transition-all duration-150 text-left`}
+                    onMouseDown={(e) => handleMouseDown(e, lbl.id, xPosPct, yPosPct)}
+                    className={`flex flex-col gap-0.5 p-1 rounded-md shadow-lg ${badgeBg} ${badgeBorder} select-none transition-all duration-150 text-left cursor-grab active:cursor-grabbing hover:shadow-xl`}
                     style={{
-                      fontSize: `${Math.max(9, 11 / zoom)}px`, // Compensate font slightly
+                      fontSize: `${Math.max(7, (10 / zoom) * sizeScale)}px`, // scaled compact font-size
                       transform: `scale(${1 / Math.sqrt(zoom)})`, // Elastic smooth sizing
                       transformOrigin: lbl.side === 'left' ? 'left center' : 'right center',
-                      maxHeight: '110px',
+                      maxHeight: `${100 * sizeScale}px`,
+                      opacity: opacity, // Applied adjustable opacity (default 80%)
                     }}
                   >
                     {/* Header showing count & Primary Member */}
-                    <div className="flex items-center justify-between border-b border-white/10 pb-1 mb-1 font-mono text-[9px] uppercase tracking-wider text-slate-400">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`h-1.5 w-1.5 rounded-full ${pointColorIndicator}`} />
-                        <span>{lbl.primaryMember}</span>
+                    <div className={`flex items-center justify-between border-b border-black/10 pb-0.5 mb-1 font-mono text-[9px] uppercase tracking-wider ${textColorClass} font-bold`}>
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        <span className={`h-1.5 w-1.5 rounded-full ${pointColorIndicator} shrink-0`} />
+                        <span className="truncate">{lbl.primaryMember}</span>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-300">
+                      <span className="text-[10px] font-extrabold shrink-0">
                         ({lbl.damages.length})
                       </span>
                     </div>
 
                     {/* Stack of Damages inside this coordinate group */}
-                    <div className="flex flex-col gap-1.5 overflow-y-auto max-h-[85px] pr-0.5 scrollbar-thin scrollbar-thumb-slate-700">
+                    <div className="stop-drag flex flex-col gap-1 overflow-y-auto max-h-[75px] pr-0.5 scrollbar-thin scrollbar-thumb-slate-400">
                       {lbl.damages.map((d) => {
                         const isSelectedDamage = d.id === activeDamageId;
                         return (
@@ -390,21 +635,14 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
                               ev.stopPropagation();
                               onSelectDamage(d.id);
                             }}
-                            className={`cursor-pointer px-1 py-0.5 rounded text-[10px] flex flex-col gap-0.5 hover:bg-white/10 transition-colors leading-tight ${
+                            className={`cursor-pointer px-1 py-0.5 rounded text-[10px] flex flex-col gap-0.5 transition-colors leading-tight ${textColorClass} ${
                               isSelectedDamage
-                                ? 'bg-white/20 font-bold ring-1 ring-white/30'
-                                : ''
+                                ? `${damageRowSelectedBgClass} font-bold`
+                                : `${damageRowBgClass}`
                             }`}
                           >
-                            <div className="font-semibold flex items-center justify-between">
+                            <div className="font-bold flex items-center justify-between">
                               <span>No.{d.no} {d.type}</span>
-                              <span className="text-[9px] opacity-75">{d.floor}</span>
-                            </div>
-                            <div className="text-[9px] text-slate-300 font-mono truncate">
-                              {d.type.includes('균열') 
-                                ? `${d.widthVal.toFixed(1)}mm x ${d.lengthVal.toFixed(1)}m`
-                                : `${d.widthVal.toFixed(1)}x${d.lengthVal.toFixed(1)}m` + (d.areaVal ? ` (${d.areaVal.toFixed(1)}㎡)` : '')
-                              }
                             </div>
                           </div>
                         );

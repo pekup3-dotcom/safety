@@ -12,6 +12,7 @@ interface DashboardProps {
   onCreateProject: (project: Omit<Project, 'id' | 'damages' | 'createdAt' | 'updatedAt'>) => void;
   onSelectProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
+  isLocalMode?: boolean;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -19,6 +20,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onCreateProject,
   onSelectProject,
   onDeleteProject,
+  isLocalMode = false,
 }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [facilityRaw, setFacilityRaw] = useState('');
@@ -119,6 +121,24 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Elegant local mode fallback guidance notice */}
+      {isLocalMode && (
+        <div className="mb-8 p-4.5 rounded-xl bg-amber-950/20 border border-amber-900/40 flex items-start gap-4 shadow-xl">
+          <div className="p-1 px-2.5 rounded bg-amber-500/10 text-amber-400 font-bold text-[10px] uppercase font-mono tracking-wider shrink-0 mt-0.5">
+            Offline Safe
+          </div>
+          <div className="text-xs text-slate-300 leading-relaxed font-sans">
+            <p className="font-bold text-amber-400 text-sm mb-1 flex items-center gap-1.5ClassName bg-transparent">
+              <span>⚠️ 실시간 데이터베이스 연결 제한 (로컬 기기 저장 모드 실행 중)</span>
+            </p>
+            현재 Firebase Anonymous Authentication(익명 인증) 제공업체가 비활성화되어 있어 브라우저 안전 로컬 전용 모드로 작동하고 있습니다. 
+            현장 작성 데이터는 귀하의 현재 웹 브라우저 내에 즉각 안전하게 실시간 저장됩니다. 
+            기기간 실시간 연동 및 클라우드 동기화를 복구하시려면, Firebase Console의 <span className="font-semibold text-white">Authentication &gt; Sign-in method</span> 페이지에서 
+            <span className="font-semibold text-white">Anonymous(익명)</span> 로그인을 사용 설정(Enable) 해주십시오.
+          </div>
+        </div>
+      )}
 
       {/* Main projects grid layout */}
       {projects.length === 0 ? (
