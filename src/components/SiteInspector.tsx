@@ -9,7 +9,7 @@ import { DrawingCanvas } from './DrawingCanvas';
 import { compressImage } from '../utils/imageCompressor';
 import { generateId } from '../utils/uuid';
 import { convertPdfToImage } from '../utils/pdfRenderer';
-import { ArrowLeft, Camera, Image as ImageIcon, Sparkles, Plus, Trash2, Printer, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Camera, Image as ImageIcon, Sparkles, Plus, Trash2, Printer, CheckCircle2, ShieldAlert, Download, FileSpreadsheet } from 'lucide-react';
 
 interface SiteInspectorProps {
   project: Project;
@@ -43,8 +43,18 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
   const [damageType, setDamageType] = useState<DamageType>('균열');
   const [memberType, setMemberType] = useState<MemberType>('벽체');
   const [floor, setFloor] = useState<string>(project.floorOptions[0] || '지상1층');
+  const [facility, setFacility] = useState<string>(project.facilitiesList?.[0] || project.name);
   const [cause, setCause] = useState<string>('');
   const [customCause, setCustomCause] = useState<string>('');
+
+  // Sync state with project on load
+  useEffect(() => {
+    if (project.facilitiesList && project.facilitiesList.length > 0) {
+      setFacility(project.facilitiesList[0]);
+    } else {
+      setFacility(project.name);
+    }
+  }, [project]);
   
   // Numerical metrics
   const [widthVal, setWidthVal] = useState<number>(0.2); // Default for 균열 / 습식균열
@@ -114,6 +124,7 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
       cause: cause,
       customCause: cause === '기타 직접입력' ? customCause : undefined,
       floor: floor,
+      facility: facility || (project.facilitiesList?.[0] || project.name),
       member: memberType,
       widthVal: parseFloat(widthVal.toFixed(1)),
       lengthVal: parseFloat(lengthVal.toFixed(1)),
@@ -310,6 +321,42 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
     }
   };
 
+  const handleDownloadCSV = () => {
+    try {
+      const BOM = "\uFEFF";
+      const headers = ["연번", "시설물명", "위치(층/부재)", "결함종류", "규격 폭(mm) / 가로(m)", "길이(m)", "집계물량수치", "손상 대분류 원인"];
+      const rows = project.damages.map((d) => {
+        const isCrack = ['균열', '습식균열', '조적균열', '이질마감재 균열'].includes(d.type);
+        const dimensionVal = isCrack ? `${d.widthVal} mm` : `${d.widthVal} m`;
+        const metricVal = isCrack ? `${d.lengthVal} m` : `${(d.areaVal ?? (d.widthVal * d.lengthVal)).toFixed(2)} ㎡`;
+        const causeStr = d.cause === '기타 직접입력' ? (d.customCause || '직접 기입') : d.cause;
+        return [
+          `No.${d.no}`,
+          d.facility || project.name,
+          `${d.floor} / ${d.member}`,
+          d.type,
+          dimensionVal,
+          d.lengthVal,
+          metricVal,
+          causeStr
+        ];
+      });
+
+      const csvContent = BOM + [headers.join(","), ...rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))].join("\n");
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${project.name}_손상현황대장.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("CSV 다운로드 처리 중 실패가 발생했습니다.");
+    }
+  };
+
   const handleCanvasAddMarker = (x: number, y: number) => {
     setClickedCoords({ x, y });
     
@@ -497,10 +544,10 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
                 <div className="flex justify-between items-start pt-1.5">
                   <div>
                     <h3 className="text-sm font-bold text-white">
-                      No.{activeDamage.no} - {activeDamage.type} ({activeDamage.floor})
+                      No.{activeDamage.no} - {activeDamage.type} ({activeDamage.facility || project.name})
                     </h3>
                     <p className="text-xs text-indigo-300 font-medium mt-0.5">
-                      부재: {activeDamage.member}
+                      위치: {activeDamage.floor} / {activeDamage.member}
                     </p>
                     <p className="text-xs font-mono text-cyan-400 mt-1">
                       규격: {activeDamage.type.includes('균열') 
@@ -670,8 +717,24 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
                 </div>
               </div>
 
-              {/* Flooring range drop list */}
+              {/* Facility and Floor Selection */}
               <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">조사 시설물 선택</label>
+                  <select
+                    value={facility}
+                    onChange={(e) => setFacility(e.target.value)}
+                    className="w-full text-xs p-2 bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded text-slate-100 outline-none cursor-pointer"
+                  >
+                    {project.facilitiesList && project.facilitiesList.length > 0 ? (
+                      project.facilitiesList.map((f) => (
+                        <option key={f} value={f}>{f}</option>
+                      ))
+                    ) : (
+                      <option value={project.name}>{project.name}</option>
+                    )}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">조사 위치 (층선택)</label>
                   <select
@@ -684,8 +747,10 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
                     ))}
                   </select>
                 </div>
+              </div>
 
-                {/* Dynamic width and lengths */}
+              {/* Dimensions: width & length */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">
                     {['균열', '습식균열', '조적균열', '이질마감재 균열'].includes(damageType) ? '균열 폭 (단위: mm)' : '가로 크기 (단위: m)'}
@@ -946,6 +1011,25 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                도면명 직접 입력
+              </label>
+              <input
+                type="text"
+                value={project.drawingName || ''}
+                onChange={(e) => {
+                  onUpdateProject({
+                    ...project,
+                    drawingName: e.target.value,
+                    updatedAt: new Date().toISOString(),
+                  });
+                }}
+                placeholder="도면명을 입력하세요 (예: 지하1층 구조안전평면도)"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-sky-400 placeholder-slate-600 transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
                 도면 파일 선택 (PDF 또는 이미지)
               </label>
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -999,13 +1083,71 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
                 기입된 결함 점검 수치 기준 종합대장입니다. 아래 테이블이 A4 규격 레이아웃으로 프린트 출력됩니다.
               </p>
             </div>
-            <button
-              onClick={() => window.print()}
-              className="inline-flex items-center justify-center gap-1.5 px-4.5 py-3 text-xs font-bold rounded-xl text-slate-950 bg-amber-400 hover:bg-amber-300 transition-colors shadow-md transform active:scale-95 cursor-pointer"
-            >
-              <Printer className="h-4 w-4" />
-              손상현황표 즉시 인쇄 (PDF 저장)
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={handleDownloadCSV}
+                className="inline-flex items-center justify-center gap-1.5 px-4.5 py-3 text-xs font-bold rounded-xl text-white bg-sky-600 hover:bg-sky-500 transition-colors shadow-md transform active:scale-95 cursor-pointer"
+                title="엑셀에서 열 수 있는 UTF-8 BOM CSV 파일로 손상현황 대장을 모바일, 태블릿, PC로 다운로드합니다"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                현황표 파일 저장 (Excel)
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center justify-center gap-1.5 px-4.5 py-3 text-xs font-bold rounded-xl text-slate-950 bg-amber-400 hover:bg-amber-300 transition-colors shadow-md transform active:scale-95 cursor-pointer"
+              >
+                <Printer className="h-4 w-4" />
+                손상현황표 즉시 인쇄 (PDF 저장)
+              </button>
+            </div>
+          </div>
+
+          {/* Real-time quantity aggregation table inside inspector screen (Noprint block for print clarity, but visible on screen) */}
+          <div className="bg-slate-950 border border-slate-850 p-4 rounded-xl space-y-2 text-xs no-print">
+            <h4 className="font-bold text-slate-200 flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              📊 이번 층 조사손상 누적 물량 집계 현황 요약
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {(() => {
+                const map: Record<string, { count: number; total: number; unit: string }> = {};
+                project.damages.forEach((d) => {
+                  const isCrack = ['균열', '습식균열', '조적균열', '이질마감재 균열'].includes(d.type);
+                  const unit = isCrack ? 'm' : '㎡';
+                  const val = isCrack ? d.lengthVal : (d.areaVal ?? (d.widthVal * d.lengthVal));
+
+                  const groupKey = (d.type === '균열' || d.type === '습식균열')
+                    ? `${d.type} (폭 ${d.widthVal}mm)`
+                    : d.type;
+
+                  if (!map[groupKey]) {
+                    map[groupKey] = { count: 0, total: 0, unit };
+                  }
+                  map[groupKey].count += 1;
+                  map[groupKey].total += val;
+                });
+
+                return Object.entries(map).map(([type, data]) => ({
+                  type,
+                  count: data.count,
+                  total: data.total,
+                  unit: data.unit,
+                })).sort((a, b) => a.type.localeCompare(b.type)).map((agg) => (
+                  <div key={agg.type} className="bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-slate-300">{agg.type}</p>
+                      <p className="text-[10px] text-slate-500 font-mono font-medium">{agg.count} 개소</p>
+                    </div>
+                    <p className="font-mono text-emerald-400 font-bold text-sm">
+                      {agg.total.toFixed(2)} <span className="text-[10px] text-slate-400 font-sans">{agg.unit}</span>
+                    </p>
+                  </div>
+                ));
+              })()}
+            </div>
+            {project.damages.length === 0 && (
+              <p className="text-slate-500 text-[11px] italic">등록된 손상이 없습니다. 우측 도면 마킹 패널에서 손상을 생성하면 실시간 집계가 진행됩니다.</p>
+            )}
           </div>
 
           {/* High Fidelity Table Layout optimized also for Paper printouts */}
@@ -1029,7 +1171,7 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
                   return (
                     <tr key={d.id} className="hover:bg-slate-850/50 transition-colors">
                       <td className="p-3.5 text-center font-mono font-bold text-emerald-400 print:text-black border-r border-slate-800/80 print:border-slate-300">No.{d.no}</td>
-                      <td className="p-3.5 font-medium text-white print:text-black border-r border-slate-800/80 print:border-slate-300">{project.name}</td>
+                      <td className="p-3.5 font-medium text-white print:text-black border-r border-slate-800/80 print:border-slate-300">{d.facility || project.name}</td>
                       <td className="p-3.5 border-r border-slate-800/80 print:border-slate-300">{d.floor} / {d.member}</td>
                       <td className="p-3.5 font-mono border-r border-slate-800/80 print:border-slate-300">
                         <span className="inline-block px-2 py-0.5 text-[10px] bg-slate-800 text-slate-300 border border-slate-750 rounded mr-2 font-sans font-semibold print:bg-slate-100 print:text-slate-900 print:border-slate-300">

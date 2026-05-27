@@ -3,351 +3,306 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Project } from '../types';
-import { FolderPlus, Clock, Building2, Layers, Trash2, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Project, BaseInspectionSettings, getComputedFloors } from '../types';
+import { Clock, Building2, Layers, Trash2, ArrowRight, Settings2, PlusCircle, CheckCircle2, PlayCircle } from 'lucide-react';
 
 interface DashboardProps {
   projects: Project[];
-  onCreateProject: (project: Omit<Project, 'id' | 'damages' | 'createdAt' | 'updatedAt'>) => void;
+  baseSettings: BaseInspectionSettings;
+  onSaveBaseSettings: (settings: BaseInspectionSettings) => void;
+  onCreateProject: () => void;
   onSelectProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
+  onToggleProjectStatus: (id: string) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
   projects,
+  baseSettings,
+  onSaveBaseSettings,
   onCreateProject,
   onSelectProject,
   onDeleteProject,
+  onToggleProjectStatus,
 }) => {
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [facilityRaw, setFacilityRaw] = useState('');
-  const [inspectionCompany, setInspectionCompany] = useState('');
-  const [basementFloors, setBasementFloors] = useState<number>(1);
-  const [abovegroundFloors, setAbovegroundFloors] = useState<number>(3);
-  const [drawingData, setDrawingData] = useState<string | null>(null);
-  const [drawingName, setDrawingName] = useState<string | null>(null);
-  const [uiError, setUiError] = useState<string | null>(null);
+  // Base settings edit state
+  const [facilitiesText, setFacilitiesText] = useState(baseSettings.facilitiesText);
+  const [basementFloors, setBasementFloors] = useState<number>(baseSettings.basementFloors);
+  const [abovegroundFloors, setAbovegroundFloors] = useState<number>(baseSettings.abovegroundFloors);
+  const [phFloors, setPhFloors] = useState<number>(baseSettings.phFloors);
+  const [inspectionCompany, setInspectionCompany] = useState(baseSettings.inspectionCompany);
+  
+  const [creationError, setCreationError] = useState<string | null>(null);
 
-  const handleDrawingUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Sync settings whenever parent settings change
+  useEffect(() => {
+    setFacilitiesText(baseSettings.facilitiesText);
+    setBasementFloors(baseSettings.basementFloors);
+    setAbovegroundFloors(baseSettings.abovegroundFloors);
+    setPhFloors(baseSettings.phFloors);
+    setInspectionCompany(baseSettings.inspectionCompany);
+  }, [baseSettings]);
 
-    if (file.size > 1.8 * 1024 * 1024) {
-      alert("도면 용량이 너무 큽니다. 데이터 안전 보관을 위해 1.8MB 이하의 이미지를 사용해 주십시오.");
-      return;
-    }
-
-    setDrawingName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (typeof event.target?.result === 'string') {
-        setDrawingData(event.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleSaveAndCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!facilityRaw.trim()) {
-      setUiError('최소 하나의 시설물명을 입력해주세요.');
+    if (!facilitiesText.trim()) {
+      alert('최소 하나의 시설물명을 기입해주십시오.');
       return;
     }
-    if (!inspectionCompany.trim()) {
-      setUiError('점검업체명을 입력해주세요.');
-      return;
-    }
+    
+    // 1. Silent Save base settings
+    const updatedSettings: BaseInspectionSettings = {
+      facilitiesText,
+      basementFloors,
+      abovegroundFloors,
+      phFloors,
+      inspectionCompany: inspectionCompany || '미지정 점검업체',
+    };
+    onSaveBaseSettings(updatedSettings);
 
-    const facilitiesList = facilityRaw
+    const parsed = facilitiesText
       .split(',')
       .map((f) => f.trim())
       .filter((f) => f.length > 0);
 
-    // Compute floor list
-    const computedFloors: string[] = [];
-    for (let i = abovegroundFloors; i >= 1; i--) {
-      computedFloors.push(`지상${i}층`);
-    }
-    for (let i = 1; i <= basementFloors; i++) {
-      computedFloors.push(`지하${i}층`);
+    const firstFacility = parsed[0] || '신규 현장';
+    const projName = parsed.length > 1
+      ? `${firstFacility} 외 ${parsed.length - 1}개소`
+      : firstFacility;
+
+    // Check duplication
+    const isDup = projects.some(p => p.name === projName);
+    if (isDup) {
+      setCreationError('이미 동일한 이름의 현장조사가 목록에 등록되어 있습니다.');
+      return;
     }
 
-    onCreateProject({
-      name: facilitiesList[0] || '미지정 시설물',
-      inspectionCompany: inspectionCompany,
-      facilitiesRaw: facilityRaw,
-      facilitiesList: facilitiesList,
-      basementFloors: basementFloors,
-      abovegroundFloors: abovegroundFloors,
-      floorOptions: computedFloors,
-      drawingUrl: drawingData,
-      drawingName: drawingName,
-    });
-
-    // Reset fields
-    setFacilityRaw('');
-    setInspectionCompany('');
-    setBasementFloors(1);
-    setAbovegroundFloors(3);
-    setDrawingData(null);
-    setDrawingName(null);
-    setUiError(null);
-    setShowCreateModal(false);
+    setCreationError(null);
+    
+    // Create Project in App.tsx
+    onCreateProject();
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-      {/* Upper Brand Section */}
-      <div className="md:flex md:items-center md:justify-between border-b border-slate-700/65 pb-6 mb-8">
-        <div className="flex-1 min-w-0">
-          <h1 className="text-3xl font-extrabold font-sans text-white tracking-tight sm:text-4xl">
-            시설물 안전 진단 시스템
-          </h1>
-          <p className="mt-2 text-sm text-slate-400 font-sans leading-relaxed">
-            안드로이드 태블릿 및 스마트폰 모바일에 최적화된 손상조사 및 사진대지 A4 즉시 출력 솔루션
-          </p>
-        </div>
-        <div className="mt-4 md:mt-0 flex">
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-2 px-5 py-3 border border-transparent text-sm font-semibold rounded-xl text-slate-950 bg-emerald-400 hover:bg-emerald-300 active:bg-emerald-500 shadow-md transition-all duration-150 transform hover:-translate-y-0.5 cursor-pointer"
-            id="btn-create-site"
-          >
-            <FolderPlus className="h-5 w-5" />
-            새 현장조사 등록
-          </button>
-        </div>
+      {/* Brand Title Section */}
+      <div className="border-b border-slate-800/80 pb-6 mb-8">
+        <h1 className="text-3xl font-extrabold font-sans text-white tracking-tight sm:text-4xl text-emerald-400">
+          AEG Corp. Class1
+        </h1>
+        <p className="mt-2 text-sm text-slate-400 font-sans leading-relaxed">
+          공학적 정량화 기반 스마트 건설안전 점검 및 도면 마커·정밀 서식 자동 연동 시스템
+        </p>
       </div>
 
-      {/* Main projects grid layout */}
-      {projects.length === 0 ? (
-        <div className="text-center py-20 bg-slate-800/20 border border-slate-800/80 rounded-2xl p-8 shadow-inner">
-          <Building2 className="mx-auto h-14 w-14 text-slate-600 mb-4 animate-pulse" />
-          <h3 className="text-lg font-bold text-slate-200">진행 중인 현장 조사가 없습니다</h3>
-          <p className="mt-2 text-sm text-slate-400 max-w-sm mx-auto">
-            우측 상단의 '새 현장조사 등록' 버튼을 터치하여 현장 시설물의 도면을 등록하고 세밀한 안전 점검을 시작해 보십시오.
-          </p>
-          <div className="mt-6">
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-1.5 px-4.5 py-2.5 text-xs font-semibold text-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/30 border border-emerald-900/50 rounded-lg transition-colors cursor-pointer"
-            >
-              현장 만들기 첫걸음
-              <ArrowRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((proj) => (
-            <div
-              key={proj.id}
-              className="relative group bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-200 flex flex-col justify-between"
-              id={`project-card-${proj.id}`}
-            >
-              <div className="p-5 flex-1 cursor-pointer" onClick={() => onSelectProject(proj.id)}>
-                {/* Upper row */}
-                <div className="flex justify-between items-start gap-3 mb-3">
-                  <div className="p-2 sm:p-2.5 rounded-lg bg-slate-800 text-emerald-400">
-                    <Building2 className="h-6 w-6" />
-                  </div>
-                  <span className="inline-flex items-center px-2.5 py-1.5 rounded-md text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 font-mono">
-                    점검항목 {proj.damages.length}건
-                  </span>
-                </div>
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        {/* Left Column: Integrated Settings and Direct Action Inputs */}
+        <div className="lg:col-span-5 space-y-6">
+          
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+            <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2 mb-4 border-b border-slate-800 pb-2">
+              <Settings2 className="h-4.5 w-4.5 text-emerald-400" />
+              조사 정보 등록 및 신규 점검 시작
+            </h2>
+            <form onSubmit={handleSaveAndCreate} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-400 mb-1 leading-tight">
+                  점검대상 시설물 목록 (쉼표로 구분하여 여러 개 입력)
+                </label>
+                <input
+                  type="text"
+                  value={facilitiesText}
+                  onChange={(e) => {
+                    setFacilitiesText(e.target.value);
+                    setCreationError(null);
+                  }}
+                  placeholder="예: 가동, 나동, 주차타워"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded px-3 py-2 text-white font-medium"
+                />
+              </div>
 
-                {/* Facilities meta */}
-                <h3 className="text-lg font-extrabold text-white tracking-tight group-hover:text-emerald-400 transition-colors">
-                  {proj.name}
-                </h3>
-                
-                <p className="mt-1 text-xs text-slate-400 line-clamp-2">
-                  시설 목록: {proj.facilitiesList.join(', ')}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-400 mb-1">지하 규모 (층수)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={basementFloors}
+                    onChange={(e) => setBasementFloors(parseInt(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded px-3 py-2 text-white font-mono text-center"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-400 mb-1">지상 규모 (층수)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={abovegroundFloors}
+                    onChange={(e) => setAbovegroundFloors(parseInt(e.target.value) || 1)}
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded px-3 py-2 text-white font-mono text-center"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-400 mb-1">PH(옥탑) 규모 (층수)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="5"
+                    value={phFloors}
+                    onChange={(e) => setPhFloors(parseInt(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded px-3 py-2 text-white font-mono text-center"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-400 mb-1">안전 검사업체명</label>
+                <input
+                  type="text"
+                  value={inspectionCompany}
+                  onChange={(e) => setInspectionCompany(e.target.value)}
+                  placeholder="예: (주)한국건설진단평가"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded px-3 py-2 text-white font-medium"
+                />
+              </div>
+
+              {creationError && (
+                <p className="text-red-400 text-[11px] bg-red-950/20 border border-red-900/40 p-2.5 rounded leading-relaxed">
+                  ⚠️ {creationError}
                 </p>
+              )}
 
-                {/* Floors info */}
-                <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-400 border-t border-slate-800/80 pt-4">
-                  <span className="flex items-center gap-1">
-                    <Layers className="h-3.5 w-3.5 text-slate-500" />
-                    지하 {proj.basementFloors}층 ~ 지상 {proj.abovegroundFloors}층
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                    {proj.inspectionCompany}
-                  </span>
-                </div>
-              </div>
+              <button
+                type="submit"
+                disabled={!facilitiesText.trim()}
+                className="w-full mt-2 inline-flex justify-center items-center gap-1.5 px-4 py-3 bg-emerald-400 hover:bg-emerald-300 disabled:bg-slate-800 disabled:text-slate-600 active:bg-emerald-500 text-slate-950 font-extrabold rounded-lg shadow-md text-xs cursor-pointer transition-all transform hover:-translate-y-0.5 active:translate-y-0"
+              >
+                기본설정 저장 및 신규 점검 시작
+                <ArrowRight className="h-4 w-4 text-slate-950" />
+              </button>
+            </form>
+          </div>
 
-              {/* Card Footer controls */}
-              <div className="px-5 py-3.5 bg-slate-950/40 border-t border-slate-800/80 flex justify-between items-center text-xs">
-                <span className="text-slate-500 flex items-center gap-1 font-mono">
-                  <Clock className="h-3.5 w-3.5 text-slate-600" />
-                  {new Date(proj.updatedAt).toLocaleDateString()} 수정됨
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => onDeleteProject(proj.id)}
-                    className="p-1 px-2.5 font-medium rounded text-red-400 hover:text-red-300 hover:bg-red-950/30 border border-transparent hover:border-red-900/40 transition-all flex items-center gap-1"
-                    title="현장 삭제"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    삭제
-                  </button>
-                  <button
-                    onClick={() => onSelectProject(proj.id)}
-                    className="p-1.5 px-3 font-semibold rounded text-emerald-400 hover:text-emerald-300 bg-emerald-950/20 hover:bg-emerald-950/40 border border-emerald-900/60 transition-colors flex items-center gap-1"
-                  >
-                    이어서 작성
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
-      )}
 
-      {/*  새 현장조사 등록 모달 */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            {/* Backdrop */}
-            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity" onClick={() => setShowCreateModal(false)}></div>
+        {/* Right Column: List of Current Registered Investigations */}
+        <div className="lg:col-span-7 space-y-4">
+          
+          <div className="bg-slate-900/80 border border-slate-850 rounded-xl p-5 shadow-lg min-h-[400px] flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Building2 className="h-4.5 w-4.5 text-indigo-400" />
+                  조사 진행중인 시설물 목록 ({projects.length})
+                </h2>
+                <span className="text-[10px] font-mono text-slate-500">
+                  각 행의 상태 뱃지를 터치해 손쉽게 완료 여부를 토글할 수 있습니다.
+                </span>
+              </div>
 
-            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-            {/* Modal Body */}
-            <div className="inline-block align-bottom bg-slate-900 border border-slate-800 rounded-2xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <form onSubmit={handleFormSubmit}>
-                <div className="px-6 pt-6 pb-4 bg-slate-850 border-b border-slate-800/80">
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <FolderPlus className="h-5 w-5 text-emerald-400" />
-                    새로운 점검 현장조사 만들기
-                  </h3>
-                  <p className="mt-1 text-xs text-slate-400">
-                    보고서 출력 및 도면 오버레이에 사용되는 기본 범위를 지정합니다.
+              {/* Grid / list */}
+              {projects.length === 0 ? (
+                <div className="text-center py-16 flex flex-col items-center justify-center">
+                  <Building2 className="h-12 w-12 text-slate-700 mb-3 animate-pulse" />
+                  <p className="text-sm text-slate-400 font-bold">등록된 조사 현장이 없습니다.</p>
+                  <p className="text-xs text-slate-500 mt-1.5 max-w-xs leading-relaxed text-center">
+                    왼쪽의 가이드 패널에서 조사할 시설물명과 조사층수를 지정하여 신규 점검조사 대장을 활성화 시키십시오.
                   </p>
                 </div>
+              ) : (
+                <div className="space-y-3.5">
+                  {projects.map((proj) => {
+                    const isCompleted = proj.status === '조사 완료';
+                    return (
+                      <div
+                        key={proj.id}
+                        className="bg-slate-950 border border-slate-800 hover:border-slate-700/80 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-all duration-150"
+                      >
+                        <div className="space-y-1">
+                          {/* Title element */}
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-extrabold text-white tracking-tight hover:text-emerald-400 cursor-pointer transition-colors" onClick={() => onSelectProject(proj.id)}>
+                              {proj.name}
+                            </h3>
+                            
+                            {/* Toggleable Status badge */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleProjectStatus(proj.id);
+                              }}
+                              className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all duration-100 flex items-center gap-1 cursor-pointer border ${
+                                isCompleted
+                                  ? 'bg-emerald-950/30 text-emerald-400 border-emerald-900/70'
+                                  : 'bg-amber-950/30 text-amber-400 border-amber-900/70'
+                              }`}
+                              title="누르면 상태를 변경합니다"
+                            >
+                              {isCompleted ? (
+                                <>
+                                  <CheckCircle2 className="h-3 w-3 inline-block" />
+                                  조사 완료
+                                </>
+                              ) : (
+                                <>
+                                  <PlayCircle className="h-3 w-3 inline-block animate-spin" style={{ animationDuration: '3s' }} />
+                                  조사 중
+                                </>
+                              )}
+                            </button>
+                          </div>
 
-                <div className="p-6 space-y-4">
-                  {uiError && (
-                    <div className="p-3 text-xs font-semibold text-red-400 bg-red-950/20 border border-red-900/50 rounded-lg">
-                      ⚠️ {uiError}
-                    </div>
-                  )}
+                          {/* Sub elements details */}
+                          <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-slate-500 text-[11px] font-mono leading-tight">
+                            <span className="flex items-center gap-1">
+                              <Layers className="h-3 w-3 text-slate-600" />
+                              점검결함: {proj.damages.length}건
+                            </span>
+                            <span>|</span>
+                            <span>업체: {proj.inspectionCompany}</span>
+                          </div>
+                        </div>
 
-                  {/* Facilities Name */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                      시설물명 목록 (쉼표 구분) <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-lg text-slate-100 outline-none transition-colors"
-                      placeholder="예시: 본관동, 별관동, 지하주차장"
-                      value={facilityRaw}
-                      onChange={(e) => setFacilityRaw(e.target.value)}
-                      required
-                    />
-                    <p className="mt-1 text-[11px] text-slate-500">
-                      여러 시설물은 쉼표(,)로 구분해 주세요. 첫째 시설물이 대표 현장명이 됩니다.
-                    </p>
-                  </div>
-
-                  {/* Inspector name */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                      점검 업체명 <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-lg text-slate-100 outline-none transition-colors"
-                      placeholder="예시: (주)한국구조안전 기술원"
-                      value={inspectionCompany}
-                      onChange={(e) => setInspectionCompany(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  {/* Floor settings bounds row */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                        지상 층수 권역 <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="80"
-                        className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg text-slate-100 outline-none"
-                        value={abovegroundFloors}
-                        onChange={(e) => setAbovegroundFloors(parseInt(e.target.value) || 1)}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                        지하 층수 권역 <span className="text-red-400">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="15"
-                        className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg text-slate-100 outline-none"
-                        value={basementFloors}
-                        onChange={(e) => setBasementFloors(parseInt(e.target.value) >= 0 ? parseInt(e.target.value) : 0)}
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {/* Layout Attachment Drawing upload option */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1">
-                      건물 평면도 및 도면 첨부 (선택사항, 최대 1.8MB)
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 border border-slate-700 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors">
-                        파일 찾기
-                        <input
-                          type="file"
-                          accept="image/png, image/jpeg, image/jpg"
-                          onChange={handleDrawingUpload}
-                          className="hidden"
-                        />
-                      </label>
-                      <span className="text-xs text-slate-400 truncate max-w-xs">
-                        {drawingName ? drawingName : '등록된 도면이 없습니다 (격자 자동생성)'}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      도면 이미지가 있으면 캔버스 위치에 정확하게 손상이 사상 마킹됩니다.
-                    </p>
-                  </div>
+                        {/* Control buttons */}
+                        <div className="flex items-center gap-2.5 self-end sm:self-center">
+                          <button
+                            onClick={() => onDeleteProject(proj.id)}
+                            className="p-1 px-2.2 text-[11px] text-red-400 hover:text-red-300 hover:bg-red-950/20 border border-transparent rounded cursor-pointer transition-colors"
+                            title="영구 삭제"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 inline mr-0.5" />
+                            삭제
+                          </button>
+                          <button
+                            onClick={() => onSelectProject(proj.id)}
+                            className="px-3.5 py-1.5 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-950/50 border border-emerald-900/60 rounded flex items-center gap-1 cursor-pointer transition-all"
+                          >
+                            이어서 조사
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-
-                {/* Submits buttons */}
-                <div className="px-6 py-4 bg-slate-950/60 border-t border-slate-800/80 flex justify-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2.5 text-xs font-semibold rounded-lg text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2.5 text-xs font-bold rounded-lg text-slate-950 bg-emerald-400 hover:bg-emerald-300 transition-colors cursor-pointer"
-                  >
-                    점검 생성 및 시작
-                  </button>
-                </div>
-              </form>
+              )}
+            </div>
+            
+            {/* Minimal notice */}
+            <div className="mt-8 border-t border-slate-850/60 pt-3 text-[10px] font-sans text-slate-500 leading-tight">
+              💡 <strong>유의 사항:</strong> 현장 기본 설정값을 갱신하더라도 이미 진행중이던 조사 리스트는 이전 설정으로 안전 상태가 단절 없이 그대로 보존됩니다. 신규 조사 대상 지정 시에만 즉각 업데이트된 기본값이 반영됩니다.
             </div>
           </div>
+          
         </div>
-      )}
+
+      </div>
+
     </div>
   );
 };

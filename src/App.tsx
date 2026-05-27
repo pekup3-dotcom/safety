@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Project } from './types';
+import { Project, BaseInspectionSettings, getComputedFloors } from './types';
 import { Dashboard } from './components/Dashboard';
 import { SiteInspector } from './components/SiteInspector';
 import { ReportViewer } from './components/ReportViewer';
@@ -25,18 +25,46 @@ export default function App() {
 
   const [showReport, setShowReport] = useState<boolean>(false);
 
+  // Persistent Global Configuration Setup (Defaults populated initially)
+  const [baseSettings, setBaseSettings] = useState<BaseInspectionSettings>({
+    facilitiesText: '테크노타워A, 주차빌딩, 복지동',
+    basementFloors: 2,
+    abovegroundFloors: 5,
+    phFloors: 1,
+    inspectionCompany: '(주)중앙 건설안전 진단원'
+  });
+
+  // Load base settings from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('safety_inspection_base_settings_v3');
+      if (saved) {
+        setBaseSettings(JSON.parse(saved));
+      }
+    } catch (_) {}
+  }, []);
+
+  const handleSaveBaseSettings = (settings: BaseInspectionSettings) => {
+    setBaseSettings(settings);
+    try {
+      localStorage.setItem('safety_inspection_base_settings_v3', JSON.stringify(settings));
+    } catch (_) {}
+  };
+
   // High fidelity default demo project to guide the user instantly
   const demoProject: Project = {
     id: 'demo-project-id',
-    name: '서울가산디지털 테크노타워',
+    name: '테크노타워A [지상 3층]',
     inspectionCompany: '(주)중앙 건설안전 진단원',
-    facilitiesRaw: '테크노타워A, 주차빌딩',
-    facilitiesList: ['테크노타워A', '주차빌딩'],
+    facilitiesRaw: '테크노타워A',
+    facilitiesList: ['테크노타워A'],
     basementFloors: 2,
     abovegroundFloors: 5,
+    phFloors: 1,
+    status: '조사 중',
     floorOptions: [
-      '지상5층', '지상4층', '지상3층', '지상2층', '지상1층',
-      '지하1층', '지하2층'
+      'PH 1층', '지상 5층', '지상 4층', '지상 3층', '지상 2층', '지상 1층',
+      '지하 1층', '지하 2층'
     ],
     drawingUrl: null, // Grid blueprint outline will auto render
     drawingName: null,
@@ -46,7 +74,7 @@ export default function App() {
         no: 1,
         type: '균열',
         cause: '콘크리트 건조수축 (Drying Shrinkage)',
-        floor: '지상3층',
+        floor: '지상 3층',
         member: '벽체',
         widthVal: 0.3,
         lengthVal: 1.5,
@@ -58,7 +86,7 @@ export default function App() {
         no: 2,
         type: '누수',
         cause: '방수층 파손 및 열화 (Waterproof Layer Damage)',
-        floor: '지하1층',
+        floor: '지하 1층',
         member: '슬래브',
         widthVal: 1.2,
         lengthVal: 0.8,
@@ -71,7 +99,7 @@ export default function App() {
         no: 3,
         type: '백화',
         cause: '배면 누수 및 만성 습기 유지 (Chronic Backing Moisture)',
-        floor: '지하2층',
+        floor: '지하 2층',
         member: '기둥',
         widthVal: 0.5,
         lengthVal: 1.2,
@@ -104,11 +132,37 @@ export default function App() {
     }
   }, []);
 
-  // Update local handlers to operate strictly offline with localStorage
-  const handleCreateProject = (cfg: Omit<Project, 'id' | 'damages' | 'createdAt' | 'updatedAt'>) => {
+  // Newly simplified project creation handler, creating a single project immediately
+  const handleCreateProject = () => {
+    const parsedFacilities = baseSettings.facilitiesText
+      .split(',')
+      .map((f) => f.trim())
+      .filter((f) => f.length > 0);
+
+    const firstFacility = parsedFacilities[0] || '신규 현장';
+    const projName = parsedFacilities.length > 1
+      ? `${firstFacility} 외 ${parsedFacilities.length - 1}개소`
+      : firstFacility;
+
+    const computedOptions = getComputedFloors(
+      baseSettings.basementFloors,
+      baseSettings.abovegroundFloors,
+      baseSettings.phFloors
+    );
+
     const newProj: Project = {
-      ...cfg,
       id: generateId(),
+      name: projName,
+      inspectionCompany: baseSettings.inspectionCompany,
+      facilitiesRaw: baseSettings.facilitiesText,
+      facilitiesList: parsedFacilities,
+      basementFloors: baseSettings.basementFloors,
+      abovegroundFloors: baseSettings.abovegroundFloors,
+      phFloors: baseSettings.phFloors,
+      status: '조사 중',
+      floorOptions: computedOptions,
+      drawingUrl: null,
+      drawingName: null,
       damages: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -124,6 +178,26 @@ export default function App() {
     });
 
     setActiveProjectId(newProj.id);
+  };
+
+  const handleToggleProjectStatus = (id: string) => {
+    setProjects((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === id) {
+          const nextStatus = p.status === '조사 완료' ? '조사 중' : '조사 완료';
+          return {
+            ...p,
+            status: nextStatus,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return p;
+      });
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
   };
 
   const handleUpdateProject = (updatedProject: Project) => {
@@ -174,10 +248,10 @@ export default function App() {
             </div>
             <div>
               <span className="text-base font-extrabold tracking-tight text-white block">
-                SMART 안전진단 엔진
+                AEG Corp. Class1
               </span>
-              <span className="text-[10px] font-mono text-slate-400 block tracking-wider uppercase -mt-0.5">
-                Damages and Photo Sheet Generator
+              <span className="text-[10px] font-mono text-emerald-400 block tracking-wider uppercase -mt-0.5">
+                SMART SAFETY DIAGNOSIS SYSTEM
               </span>
             </div>
           </div>
@@ -218,9 +292,12 @@ export default function App() {
         ) : (
           <Dashboard
             projects={projects}
+            baseSettings={baseSettings}
+            onSaveBaseSettings={handleSaveBaseSettings}
             onCreateProject={handleCreateProject}
             onSelectProject={(id) => setActiveProjectId(id)}
             onDeleteProject={handleDeleteProject}
+            onToggleProjectStatus={handleToggleProjectStatus}
           />
         )}
       </main>

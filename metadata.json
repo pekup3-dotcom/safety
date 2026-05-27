@@ -1,5 +1,5 @@
 {
-  "name": "스마트 건설안전 진단",
+  "name": "AEG Corp. Class1",
   "description": "현장 조사용 손상현황 입력, 도면마킹, 사진대지 및 A4 정밀 규격 보고서 자동 생성 시스템",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

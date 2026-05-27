@@ -30,6 +30,7 @@ export interface Damage {
   cause: string;       // Chosen preset or '기타 직접입력' -> user typing
   customCause?: string; // Custom typed cause if '기타 직접입력' is selected
   floor: string;       // Chosen floor (e.g., '지하1층', '지상3층')
+  facility?: string;    // 시설물명 (e.g., '가동', '나동')
   member: MemberType;  // Chosen member
   
   // Numerical dimensions
@@ -61,7 +62,9 @@ export interface Project {
   facilitiesList: string[];    // 시설물명 목록 배열
   basementFloors: number;      // 지하 층수
   abovegroundFloors: number;   // 지상 층수
-  floorOptions: string[];      // 자동 생성된 층 옵션 목록 (지상 층수 down to 1층, 지하 1층 down to 지하 층수)
+  phFloors?: number;           // PH 층수 (옥탑층)
+  status?: '조사 중' | '조사 완료'; // 조사 진행 상태
+  floorOptions: string[];      // 자동 생성된 층 옵션 목록
   drawingUrl: string | null;   // 도면 데이터 URL (Base64) or default grid image
   drawingName: string | null;  // 도면 파일명
   damages: Damage[];           // 손상 리스트
@@ -151,4 +154,29 @@ export function getMemberColorClass(member: MemberType): string {
     case '슬래브':
       return 'blue'; // Blue series
   }
+}
+
+export interface BaseInspectionSettings {
+  facilitiesText: string;     // 예: "가동, 나동, 다동"
+  basementFloors: number;     // 지하 층수
+  abovegroundFloors: number;  // 지상 층수
+  phFloors: number;           // 옥탑(PH) 층수
+  inspectionCompany: string;  // 점검업체명
+}
+
+export function getComputedFloors(basement: number, above: number, ph: number): string[] {
+  const list: string[] = [];
+  // PH (옥탑) 층수
+  for (let i = ph; i >= 1; i--) {
+    list.push(`PH ${i}층`);
+  }
+  // 지상 층수
+  for (let i = above; i >= 1; i--) {
+    list.push(`지상 ${i}층`);
+  }
+  // 지하 층수
+  for (let i = 1; i <= basement; i++) {
+    list.push(`지하 ${i}층`);
+  }
+  return list;
 }
