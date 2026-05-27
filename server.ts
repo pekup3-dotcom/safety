@@ -13,8 +13,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Establish safe file path derivations compatible with both ESM and CJS runtimes
+const resolvedFilename = typeof __filename !== 'undefined' 
+  ? __filename 
+  : (import.meta && import.meta.url ? fileURLToPath(import.meta.url) : '');
+const resolvedDirname = typeof __dirname !== 'undefined' 
+  ? __dirname 
+  : (resolvedFilename ? path.dirname(resolvedFilename) : process.cwd());
 
 async function startServer() {
   const app = express();
