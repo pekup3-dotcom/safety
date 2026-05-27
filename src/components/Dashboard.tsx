@@ -129,7 +129,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             Offline Safe
           </div>
           <div className="text-xs text-slate-300 leading-relaxed font-sans">
-            <p className="font-bold text-amber-400 text-sm mb-1 flex items-center gap-1.5ClassName bg-transparent">
+            <p className="font-bold text-amber-400 text-sm mb-1 flex items-center gap-1.5">
               <span>⚠️ 실시간 데이터베이스 연결 제한 (로컬 기기 저장 모드 실행 중)</span>
             </p>
             현재 Firebase Anonymous Authentication(익명 인증) 제공업체가 비활성화되어 있어 브라우저 안전 로컬 전용 모드로 작동하고 있습니다. 

@@ -155,7 +155,19 @@ export default function App() {
           let merged = [...sorted];
           
           if (activeId && !merged.some((p) => p.id === activeId)) {
-            const localActive = prev.find((p) => p.id === activeId);
+            let localActive = prev.find((p) => p.id === activeId);
+            if (!localActive) {
+              // Fail-safe fallback lookup directly from synchronous localStorage
+              try {
+                const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (saved) {
+                  const parsed = JSON.parse(saved);
+                  if (Array.isArray(parsed)) {
+                    localActive = parsed.find((p) => p.id === activeId);
+                  }
+                }
+              } catch (_) {}
+            }
             if (localActive) {
               merged = [localActive, ...merged];
             }

@@ -5,7 +5,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Damage, MemberType, getMemberColorClass } from '../types';
-import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Layers } from 'lucide-react';
 
 interface DrawingCanvasProps {
   damages: Damage[];
@@ -48,6 +48,21 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragOffsetStart, setDragOffsetStart] = useState<{ x: number; y: number } | null>(null);
+
+  // 부재별 시각적 레이어 온오프 제어 상태
+  const [visibleLayers, setVisibleLayers] = useState<Record<MemberType, boolean>>({
+    '기둥': true,
+    '벽체': true,
+    '보': true,
+    '슬래브': true,
+  });
+
+  const toggleLayer = (member: MemberType) => {
+    setVisibleLayers((prev) => ({
+      ...prev,
+      [member]: !prev[member],
+    }));
+  };
 
   // Mouse drag handler on individual label cards
   const handleMouseDown = (e: React.MouseEvent, id: string, ix: number, iy: number) => {
@@ -137,8 +152,8 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
     const groups: GroupedPoints[] = [];
     const threshold = 1.6; // 1.5% - 1.6% radius
 
-    // Filter damages with active markers
-    const markedDamages = damages.filter((d) => d.marker !== null);
+    // Filter damages with active markers and visible structural layers
+    const markedDamages = damages.filter((d) => d.marker !== null && visibleLayers[d.member]);
 
     markedDamages.forEach((damage) => {
       if (!damage.marker) return;
@@ -404,6 +419,95 @@ export const DrawingCanvas: React.FC<DrawingCanvasProps> = ({
             위치 초기화 Undo Drag
           </button>
         )}
+      </div>
+
+      {/* 구조부재 레이어 제어 패널 (Visual Toggle Layer Controls) */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-slate-800/40 border-b border-slate-800/80 text-xs text-slate-300">
+        <span className="text-slate-400 font-medium select-none flex items-center gap-1.5 mr-1 font-sans">
+          <Layers className="h-3.5 w-3.5 text-indigo-400" />
+          부재 레이어 필터:
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 기둥 (Columns) */}
+          <button
+            onClick={() => toggleLayer('기둥')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer flex items-center gap-1.5 border ${
+              visibleLayers['기둥']
+                ? 'bg-rose-500/10 text-rose-300 border-rose-500/30 shadow-xs'
+                : 'bg-slate-900/40 text-slate-500 border-slate-800 hover:border-slate-700/50'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${visibleLayers['기둥'] ? 'bg-rose-500 shadow-[0_0_6px_#ef4444]' : 'bg-slate-600'}`}></span>
+            기둥
+            <span className={`font-mono text-[9px] px-1.5 py-0.2 rounded-full ${visibleLayers['기둥'] ? 'bg-rose-500/20 text-rose-300' : 'bg-slate-800 text-slate-600'}`}>
+              {damages.filter((d) => d.marker !== null && d.member === '기둥').length}
+            </span>
+          </button>
+          
+          {/* 벽체 (Walls) */}
+          <button
+            onClick={() => toggleLayer('벽체')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer flex items-center gap-1.5 border ${
+              visibleLayers['벽체']
+                ? 'bg-rose-500/10 text-rose-300 border-rose-500/30 shadow-xs'
+                : 'bg-slate-900/40 text-slate-500 border-slate-800 hover:border-slate-700/50'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${visibleLayers['벽체'] ? 'bg-rose-500 shadow-[0_0_6px_#ef4444]' : 'bg-slate-600'}`}></span>
+            벽체
+            <span className={`font-mono text-[9px] px-1.5 py-0.2 rounded-full ${visibleLayers['벽체'] ? 'bg-rose-500/20 text-rose-300' : 'bg-slate-800 text-slate-600'}`}>
+              {damages.filter((d) => d.marker !== null && d.member === '벽체').length}
+            </span>
+          </button>
+
+          {/* 보 (Beams) */}
+          <button
+            onClick={() => toggleLayer('보')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer flex items-center gap-1.5 border ${
+              visibleLayers['보']
+                ? 'bg-sky-500/10 text-sky-400 border-sky-500/30 shadow-xs'
+                : 'bg-slate-900/40 text-slate-500 border-slate-800 hover:border-slate-700/50'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${visibleLayers['보'] ? 'bg-sky-400 shadow-[0_0_6px_#38bdf8]' : 'bg-slate-600'}`}></span>
+            보
+            <span className={`font-mono text-[9px] px-1.5 py-0.2 rounded-full ${visibleLayers['보'] ? 'bg-sky-500/20 text-sky-400' : 'bg-slate-800 text-slate-600'}`}>
+              {damages.filter((d) => d.marker !== null && d.member === '보').length}
+            </span>
+          </button>
+
+          {/* 슬래브 (Slabs) */}
+          <button
+            onClick={() => toggleLayer('슬래브')}
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer flex items-center gap-1.5 border ${
+              visibleLayers['슬래브']
+                ? 'bg-sky-500/10 text-sky-400 border-sky-500/30 shadow-xs'
+                : 'bg-slate-900/40 text-slate-500 border-slate-800 hover:border-slate-700/50'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${visibleLayers['슬래브'] ? 'bg-sky-400 shadow-[0_0_6px_#38bdf8]' : 'bg-slate-600'}`}></span>
+            슬래브
+            <span className={`font-mono text-[9px] px-1.5 py-0.2 rounded-full ${visibleLayers['슬래브'] ? 'bg-sky-500/20 text-sky-400' : 'bg-slate-800 text-slate-600'}`}>
+              {damages.filter((d) => d.marker !== null && d.member === '슬래브').length}
+            </span>
+          </button>
+        </div>
+
+        {/* Quick buttons */}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setVisibleLayers({ '기둥': true, '벽체': true, '보': true, '슬래브': true })}
+            className="px-2 py-1 text-[10px] font-bold text-slate-400 hover:text-indigo-400 hover:bg-slate-800/80 rounded transition duration-150 border border-transparent hover:border-slate-700/30 cursor-pointer"
+          >
+            전체 켜기
+          </button>
+          <button
+            onClick={() => setVisibleLayers({ '기둥': false, '벽체': false, '보': false, '슬래브': false })}
+            className="px-2 py-1 text-[10px] font-bold text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 rounded transition duration-150 border border-transparent hover:border-slate-700/30 cursor-pointer"
+          >
+            전체 끄기
+          </button>
+        </div>
       </div>
 
       {/* Main interactive area */}

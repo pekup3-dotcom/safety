@@ -73,7 +73,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
           <div className="flex-1 flex flex-col justify-center items-center">
             <div className="text-center">
               <h1 className="text-2xl font-extrabold tracking-tight border-b-2 border-slate-900 pb-2 mb-4">
-                구조물 손상위치 마킹 도면
+                결함위치도
               </h1>
               <span className="text-xs text-slate-500 font-mono">
                 [아래 표기 영역은 가로 도곽 레이아웃으로서 실제 인쇄 시 -90도 회전되어 풀사이즈로 매핑됩니다]
@@ -155,7 +155,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
         {photoPages.map((pageChunk, idx) => (
           <div className="bg-white text-slate-900 shadow-2xl w-[210mm] min-h-[297mm] p-[15mm] flex flex-col border border-slate-200" key={`screen-photo-page-${idx}`}>
             <h2 className="text-xl font-extrabold text-center border-b border-slate-800 pb-3 mb-6">
-              결함현황 사진대지 (No.{pageChunk[0].no} ~ No.{pageChunk[pageChunk.length - 1].no})
+              결함현황 사진대지
             </h2>
 
             <div className="grid grid-cols-2 gap-4 flex-1">
@@ -169,7 +169,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
                           <img
                             src={d.photoUrls[0]}
                             alt="structural fault"
-                            className="object-contain w-full h-full max-h-[140px]"
+                            className="object-cover w-full h-full"
                             referrerPolicy="no-referrer"
                           />
                         </div>
@@ -461,7 +461,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
           <div className="print-page" key={`print-photo-page-${idx}`}>
             <div className="text-center mb-4">
               <h2 className="text-lg font-bold tracking-tight border-b border-slate-950 pb-1.5 inline-block">
-                결함현황 사진대지 (No.{pageChunk[0].no} ~ No.{pageChunk[pageChunk.length - 1].no})
+                결함현황 사진대지
               </h2>
             </div>
 
@@ -478,7 +478,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
                           <img
                             src={d.photoUrls[0]}
                             alt="structural fault"
-                            className="object-contain w-full h-full max-h-[140px]"
+                            className="object-cover w-full h-full"
                             referrerPolicy="no-referrer"
                           />
                         </div>
