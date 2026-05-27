@@ -108,6 +108,8 @@ export default function App() {
         marker: { x: 70.0, y: 55.4 }
       }
     ],
+    selectedFacility: '테크노타워A',
+    selectedFloor: '지상 3층',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -164,6 +166,8 @@ export default function App() {
       drawingUrl: null,
       drawingName: null,
       damages: [],
+      selectedFacility: parsedFacilities[0] || projName,
+      selectedFloor: computedOptions[0] || '지상 1층',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -278,7 +282,7 @@ export default function App() {
       </header>
 
       {/* Main Container routes switch */}
-      <main className="flex-grow no-print">
+      <main className={`flex-grow ${showReport ? 'no-print' : ''}`}>
         {activeProject ? (
           <SiteInspector
             project={activeProject}
@@ -298,6 +302,7 @@ export default function App() {
             onSelectProject={(id) => setActiveProjectId(id)}
             onDeleteProject={handleDeleteProject}
             onToggleProjectStatus={handleToggleProjectStatus}
+            onUpdateProject={handleUpdateProject}
           />
         )}
       </main>

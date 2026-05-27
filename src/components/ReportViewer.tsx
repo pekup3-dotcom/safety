@@ -204,11 +204,15 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${project.name}_손상현황종합대장.csv`;
+      link.setAttribute("download", `${project.name}_손상현황종합대장.csv`);
+      link.setAttribute("target", "_blank");
+      link.style.display = "none";
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 150);
     } catch (e) {
       alert("CSV 다운로드 처리 중 실패가 발생했습니다.");
     }
@@ -319,7 +323,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
 
   <!-- A4 PAGE 1: DRAWINGS -->
   <div class="rotated-drawing-page">
-    <div style="text-align: center; width: 100%;">
+    <div class="no-print" style="text-align: center; width: 100%;">
       <h1 class="text-2xl font-extrabold text-slate-900 border-b-2 border-slate-900 pb-2 mb-1 tracking-tight">
         결함위치도 (Drawing Plan Map)
       </h1>
@@ -561,11 +565,15 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${project.name}_안전점검_종합보고서.html`;
+      link.setAttribute("download", `${project.name}_안전점검_종합보고서.html`);
+      link.setAttribute("target", "_blank");
+      link.style.display = "none";
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 150);
     } catch (e) {
       alert("HTML 파일 저장 기능 중 문제가 발생했습니다.");
     }
@@ -926,9 +934,8 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
             }
             .print-page {
               width: 210mm;
-              height: 297mm;
+              min-height: 297mm;
               page-break-after: always;
-              page-break-inside: avoid;
               position: relative;
               background-color: #ffffff;
               box-sizing: border-box;
@@ -955,14 +962,20 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({ project, onClose }) 
             .rotated-canvas-wrapper {
               transform: rotate(-90deg);
               transform-origin: center center;
-              width: 260mm;
-              height: 180mm;
+              width: 277mm;
+              height: 190mm;
+              position: absolute;
+              left: 50%;
+              top: 50%;
+              margin-left: -138.5mm;
+              margin-top: -95mm;
               display: flex;
               flex-direction: column;
               justify-content: space-between;
               box-sizing: border-box;
               border: 1px solid #111;
               padding: 4mm;
+              background-color: #ffffff;
             }
 
             /* Counter-rotate text boxes inside rotated drawing by 90deg so they align perfectly to eye */

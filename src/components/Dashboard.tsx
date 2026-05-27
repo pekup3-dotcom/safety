@@ -15,6 +15,7 @@ interface DashboardProps {
   onSelectProject: (id: string) => void;
   onDeleteProject: (id: string) => void;
   onToggleProjectStatus: (id: string) => void;
+  onUpdateProject?: (project: Project) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -25,6 +26,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onSelectProject,
   onDeleteProject,
   onToggleProjectStatus,
+  onUpdateProject,
 }) => {
   // Base settings edit state
   const [facilitiesText, setFacilitiesText] = useState(baseSettings.facilitiesText);
@@ -221,70 +223,120 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     return (
                       <div
                         key={proj.id}
-                        className="bg-slate-950 border border-slate-800 hover:border-slate-700/80 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 transition-all duration-150"
+                        className="bg-slate-950 border border-slate-800 hover:border-slate-700/80 rounded-lg p-4 flex flex-col gap-3.5 transition-all duration-150"
                       >
-                        <div className="space-y-1">
-                          {/* Title element */}
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-sm font-extrabold text-white tracking-tight hover:text-emerald-400 cursor-pointer transition-colors" onClick={() => onSelectProject(proj.id)}>
-                              {proj.name}
-                            </h3>
-                            
-                            {/* Toggleable Status badge */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleProjectStatus(proj.id);
-                              }}
-                              className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all duration-100 flex items-center gap-1 cursor-pointer border ${
-                                isCompleted
-                                  ? 'bg-emerald-950/30 text-emerald-400 border-emerald-900/70'
-                                  : 'bg-amber-950/30 text-amber-400 border-amber-900/70'
-                              }`}
-                              title="누르면 상태를 변경합니다"
-                            >
-                              {isCompleted ? (
-                                <>
-                                  <CheckCircle2 className="h-3 w-3 inline-block" />
-                                  조사 완료
-                                </>
-                              ) : (
-                                <>
-                                  <PlayCircle className="h-3 w-3 inline-block animate-spin" style={{ animationDuration: '3s' }} />
-                                  조사 중
-                                </>
-                              )}
-                            </button>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                          <div className="space-y-1">
+                            {/* Title element */}
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-extrabold text-white tracking-tight hover:text-emerald-400 cursor-pointer transition-colors flex items-center gap-2" onClick={() => onSelectProject(proj.id)}>
+                                {proj.name}
+                              </h3>
+                              
+                              {/* Toggleable Status badge */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleProjectStatus(proj.id);
+                                }}
+                                className={`px-2.5 py-0.5 rounded text-[10px] font-bold transition-all duration-100 flex items-center gap-1 cursor-pointer border ${
+                                  isCompleted
+                                    ? 'bg-emerald-950/30 text-emerald-400 border-emerald-900/70'
+                                    : 'bg-amber-950/30 text-amber-400 border-amber-900/70'
+                                }`}
+                                title="누르면 상태를 변경합니다"
+                              >
+                                {isCompleted ? (
+                                  <>
+                                    <CheckCircle2 className="h-3 w-3 inline-block" />
+                                    조사 완료
+                                  </>
+                                ) : (
+                                  <>
+                                    <PlayCircle className="h-3 w-3 inline-block animate-spin" style={{ animationDuration: '3s' }} />
+                                    조사 중
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Sub elements details */}
+                            <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-slate-500 text-[11px] font-mono leading-tight">
+                              <span className="flex items-center gap-1">
+                                <Layers className="h-3 w-3 text-slate-600" />
+                                점검결함: {proj.damages.length}건
+                              </span>
+                              <span>|</span>
+                              <span>업체: {proj.inspectionCompany}</span>
+                            </div>
                           </div>
 
-                          {/* Sub elements details */}
-                          <div className="flex flex-wrap gap-x-3.5 gap-y-1 text-slate-500 text-[11px] font-mono leading-tight">
-                            <span className="flex items-center gap-1">
-                              <Layers className="h-3 w-3 text-slate-600" />
-                              점검결함: {proj.damages.length}건
-                            </span>
-                            <span>|</span>
-                            <span>업체: {proj.inspectionCompany}</span>
+                          {/* Control buttons */}
+                          <div className="flex items-center gap-2.5 self-end sm:self-center">
+                            <button
+                              onClick={() => onDeleteProject(proj.id)}
+                              className="p-1 px-2 text-[11px] text-red-400 hover:text-red-300 hover:bg-red-950/20 border border-transparent rounded cursor-pointer transition-colors flex items-center gap-1"
+                              title="영구 삭제"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              삭제
+                            </button>
+                            <button
+                              onClick={() => onSelectProject(proj.id)}
+                              className="px-3.5 py-1.5 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-950/50 border border-emerald-900/60 rounded flex items-center gap-1 cursor-pointer transition-all"
+                            >
+                              이어서 조사
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </div>
 
-                        {/* Control buttons */}
-                        <div className="flex items-center gap-2.5 self-end sm:self-center">
-                          <button
-                            onClick={() => onDeleteProject(proj.id)}
-                            className="p-1 px-2.2 text-[11px] text-red-400 hover:text-red-300 hover:bg-red-950/20 border border-transparent rounded cursor-pointer transition-colors"
-                            title="영구 삭제"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 inline mr-0.5" />
-                            삭제
-                          </button>
-                          <button
-                            onClick={() => onSelectProject(proj.id)}
-                            className="px-3.5 py-1.5 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/30 hover:bg-emerald-950/50 border border-emerald-900/60 rounded flex items-center gap-1 cursor-pointer transition-all"
-                          >
-                            이어서 조사
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </button>
+                        {/* Dropdown synchronization fields for facility and floor selection */}
+                        <div className="pt-2.5 border-t border-slate-900 grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[10px] text-slate-400 font-bold mb-1">
+                              조사 시설물 선택
+                            </label>
+                            <select
+                              value={proj.selectedFacility || proj.facilitiesList?.[0] || proj.name}
+                              onChange={(e) => {
+                                onUpdateProject?.({
+                                  ...proj,
+                                  selectedFacility: e.target.value,
+                                  updatedAt: new Date().toISOString()
+                                });
+                              }}
+                              className="w-full text-[11px] p-2 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded text-slate-100 outline-none cursor-pointer"
+                            >
+                              {proj.facilitiesList && proj.facilitiesList.length > 0 ? (
+                                proj.facilitiesList.map((f) => (
+                                  <option key={f} value={f}>{f}</option>
+                                ))
+                              ) : (
+                                <option value={proj.name}>{proj.name}</option>
+                              )}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-slate-400 font-bold mb-1">
+                              조사위치 (층선택)
+                            </label>
+                            <select
+                              value={proj.selectedFloor || proj.floorOptions[0]}
+                              onChange={(e) => {
+                                onUpdateProject?.({
+                                  ...proj,
+                                  selectedFloor: e.target.value,
+                                  updatedAt: new Date().toISOString()
+                                });
+                              }}
+                              className="w-full text-[11px] p-2 bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded text-slate-100 outline-none cursor-pointer"
+                            >
+                              {proj.floorOptions && proj.floorOptions.map((opt) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                       </div>
                     );

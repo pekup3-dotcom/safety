@@ -42,19 +42,27 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
   // Form Fields
   const [damageType, setDamageType] = useState<DamageType>('균열');
   const [memberType, setMemberType] = useState<MemberType>('벽체');
-  const [floor, setFloor] = useState<string>(project.floorOptions[0] || '지상1층');
-  const [facility, setFacility] = useState<string>(project.facilitiesList?.[0] || project.name);
+  const [floor, setFloor] = useState<string>(project.selectedFloor || project.floorOptions[0] || '지상1층');
+  const [facility, setFacility] = useState<string>(project.selectedFacility || project.facilitiesList?.[0] || project.name);
   const [cause, setCause] = useState<string>('');
   const [customCause, setCustomCause] = useState<string>('');
 
-  // Sync state with project on load
+  // Sync state with project on load/switch
   useEffect(() => {
-    if (project.facilitiesList && project.facilitiesList.length > 0) {
+    if (project.selectedFacility) {
+      setFacility(project.selectedFacility);
+    } else if (project.facilitiesList && project.facilitiesList.length > 0) {
       setFacility(project.facilitiesList[0]);
     } else {
       setFacility(project.name);
     }
-  }, [project]);
+
+    if (project.selectedFloor) {
+      setFloor(project.selectedFloor);
+    } else if (project.floorOptions && project.floorOptions.length > 0) {
+      setFloor(project.floorOptions[0]);
+    }
+  }, [project.id]);
   
   // Numerical metrics
   const [widthVal, setWidthVal] = useState<number>(0.2); // Default for 균열 / 습식균열
@@ -347,11 +355,15 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${project.name}_손상현황대장.csv`;
+      link.setAttribute("download", `${project.name}_손상현황대장.csv`);
+      link.setAttribute("target", "_blank");
+      link.style.display = "none";
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 150);
     } catch (e) {
       alert("CSV 다운로드 처리 중 실패가 발생했습니다.");
     }
@@ -723,7 +735,15 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">조사 시설물 선택</label>
                   <select
                     value={facility}
-                    onChange={(e) => setFacility(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFacility(val);
+                      onUpdateProject({
+                        ...project,
+                        selectedFacility: val,
+                        updatedAt: new Date().toISOString()
+                      });
+                    }}
                     className="w-full text-xs p-2 bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded text-slate-100 outline-none cursor-pointer"
                   >
                     {project.facilitiesList && project.facilitiesList.length > 0 ? (
@@ -739,7 +759,15 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
                   <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">조사 위치 (층선택)</label>
                   <select
                     value={floor}
-                    onChange={(e) => setFloor(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFloor(val);
+                      onUpdateProject({
+                        ...project,
+                        selectedFloor: val,
+                        updatedAt: new Date().toISOString()
+                      });
+                    }}
                     className="w-full text-xs p-2 bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded text-slate-100 outline-none cursor-pointer"
                   >
                     {project.floorOptions.map((opt) => (
@@ -1148,6 +1176,77 @@ export const SiteInspector: React.FC<SiteInspectorProps> = ({
             {project.damages.length === 0 && (
               <p className="text-slate-500 text-[11px] italic">등록된 손상이 없습니다. 우측 도면 마킹 패널에서 손상을 생성하면 실시간 집계가 진행됩니다.</p>
             )}
+          </div>
+
+          {/* Print-only title and Aggregation Table (집계표) */}
+          <div className="hidden print:block mb-8 font-sans">
+            <h2 className="text-xl font-extrabold text-black text-center mb-1">
+              시설물 안전점검 손상현황 집계 총괄표 (집계표)
+            </h2>
+            <p className="text-xs text-center text-slate-800 font-medium mb-4">
+              대상 시설물명 : {project.name} &nbsp;|&nbsp; 점검업체 : {project.inspectionCompany} &nbsp;|&nbsp; 점검일시 : {new Date().toLocaleDateString()}
+            </p>
+            <table className="w-full border-collapse border border-slate-900 text-xs text-center">
+              <thead>
+                <tr className="bg-slate-100 text-black border-b border-slate-900 font-bold">
+                  <th className="border border-slate-900 p-2 w-[40%]">손상 대분류</th>
+                  <th className="border border-slate-900 p-2 w-[30%]">결함 개소 수</th>
+                  <th className="border border-slate-900 p-2 w-[30%]">집계 누적 물량</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const map: Record<string, { count: number; total: number; unit: string }> = {};
+                  project.damages.forEach((d) => {
+                    const isCrack = ['균열', '습식균열', '조적균열', '이질마감재 균열'].includes(d.type);
+                    const unit = isCrack ? 'm' : '㎡';
+                    const val = isCrack ? d.lengthVal : (d.areaVal ?? (d.widthVal * d.lengthVal));
+
+                    const groupKey = (d.type === '균열' || d.type === '습식균열')
+                      ? `${d.type} (폭 ${d.widthVal}mm)`
+                      : d.type;
+
+                    if (!map[groupKey]) {
+                      map[groupKey] = { count: 0, total: 0, unit };
+                    }
+                    map[groupKey].count += 1;
+                    map[groupKey].total += val;
+                  });
+
+                  const aggs = Object.entries(map).map(([type, data]) => ({
+                    type,
+                    count: data.count,
+                    total: data.total,
+                    unit: data.unit,
+                  })).sort((a, b) => a.type.localeCompare(b.type));
+
+                  return aggs.map((agg) => (
+                    <tr key={agg.type} className="border-b border-slate-900 hover:bg-slate-50">
+                      <td className="border border-slate-900 p-2 font-medium text-left pl-3">{agg.type}</td>
+                      <td className="border border-slate-900 p-2 font-mono">{agg.count} 개소</td>
+                      <td className="border border-slate-900 p-2 font-mono font-bold text-emerald-600 print:text-black">
+                        {agg.total.toFixed(2)} {agg.unit}
+                      </td>
+                    </tr>
+                  ));
+                })()}
+                {project.damages.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="border border-slate-900 p-3 text-slate-400">등록된 데이터가 없습니다.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Print-only break / title for Detailed Table */}
+          <div className="hidden print:block page-break-before mb-6 mt-8 font-sans">
+            <h2 className="text-xl font-extrabold text-black text-center mb-1">
+              시설물 손상현황 세부 조사 대장 (손상현황표)
+            </h2>
+            <p className="text-xs text-center text-slate-800 font-medium mb-4">
+              대상 시설물명 : {project.name} &nbsp;|&nbsp; 점검업체 : {project.inspectionCompany} &nbsp;|&nbsp; 점검일시 : {new Date().toLocaleDateString()}
+            </p>
           </div>
 
           {/* High Fidelity Table Layout optimized also for Paper printouts */}

@@ -68,6 +68,8 @@ export interface Project {
   drawingUrl: string | null;   // 도면 데이터 URL (Base64) or default grid image
   drawingName: string | null;  // 도면 파일명
   damages: Damage[];           // 손상 리스트
+  selectedFacility?: string;   // 최근/선택된 시설물명
+  selectedFloor?: string;      // 최근/선택된 층명
   createdAt: string;
   updatedAt: string;
 }
